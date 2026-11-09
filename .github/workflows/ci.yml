@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# One job, on pull requests only, so a pull request gets its answer fast: it
+# checks the title, then the app if the pull request changed it. Android and
+# Windows builds run locally before each push and in the release workflow,
+# not here. Every workflow pins ubuntu-24.04; moving to a newer image is its
+# own change, tested first.
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # Pull requests are squash-merged, so the title becomes the commit on
+      # main and decides the release.
+      - name: Conventional title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|perf|revert|docs|chore|ci|test|refactor|style|build)(\([a-z0-9-]+\))?!?: .+'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            echo "::error::Use a Conventional Commit title, e.g. \"feat: sync copied text\". Got: $TITLE"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2 # the merge commit and main, to see what changed
+
+      - name: What changed
+        id: changed
+        run: |
+          files=$(git diff --name-only HEAD^1 HEAD)
+          echo "$files"
+          # A change to this workflow checks everything.
+          if grep -qE '^app/|^\.github/workflows/ci\.yml$' <<< "$files"; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.changed.outputs.app == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.2
+          channel: stable
+          cache: true
+
+      - if: steps.changed.outputs.app == 'true'
+        name: App
+        working-directory: app
+        run: |
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+          flutter test

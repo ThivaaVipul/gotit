@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "dart-flutter@dart-flutter": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true
+  }
+}

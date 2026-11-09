@@ -1,0 +1,21 @@
+# Kotlin compiler sessions (created by Gradle builds)
+.kotlin/
+
+# Release workflow output
+release-notes.md
+dist/
+
+# Signing keys never enter the repo
+*.jks
+*.keystore
+key.properties
+
+# Local-only settings and secrets
+*.local.json
+
+# Editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
