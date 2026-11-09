@@ -161,7 +161,13 @@ Each milestone gets a short grilling of its details before code.
       - `release.yml`, which builds the APK on Ubuntu and the installer on Windows, checks the APK's certificate, and publishes both with checksums.
 
       Checked locally on 2026-11-09: a 14.5 MB arm64 APK at version 0.1.0 (code 1000), carrying the release certificate, and a 10.2 MB installer. No release from this change. Once merged and the secrets are added, a build-only run tests it on GitHub.
-    - [ ] **M1b2 Self-updates:** silent on the PC, a banner on the phone. Ships as v0.1.0.
+    - [ ] **M1b2 Self-updates:** silent on the PC, a banner on the phone. Ships as v0.1.0. Built locally on 2026-11-09, in plain Dart with small platform parts:
+      - **Checks:** both apps ask GitHub for the latest release at start and every 6 hours.
+      - **Downloads:** each download is checked against `SHA256SUMS.txt` and discarded on a mismatch.
+      - **The phone:** shows "Version x is ready" with an Update button, then hands the APK to Android's installer. The first time, Android asks to allow installs from Gotit, and the screen says so.
+      - **The PC:** runs the new setup silently and steps aside; the setup restarts Gotit, which then shows "Updated". A proper notice comes with the tray in M2.
+      - **Local builds (0.0.0)** never update.
+      - **Checks:** 20 tests, analysis clean, and Android and Windows builds pass.
 - [ ] **M2 Connecting, text and the switch:** starts with the look pass. Then:
   - discovery, and find-and-tap pairing with the 4-digit code (QR fallback);
   - the encrypted link, and copied text both ways;
