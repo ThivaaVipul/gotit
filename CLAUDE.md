@@ -34,6 +34,7 @@ Dart tests mirror `lib/` under `app/test/`. Build output (`app/build/`, `dist/`)
 - Same network only: devices talk directly, no server, no account. Nothing is queued while they're apart.
 - Logs never hold what was copied: lengths, kinds and timings only.
 - The copy watcher polls the screen only in apps that don't report taps, and only while the screen is on. Everything else is event-driven.
+- Updates come only from this repo's GitHub Releases (`lib/core/update/`): every download is checked against `SHA256SUMS.txt` before use, and local builds (version 0.0.0) never update themselves. The PC installs silently; the phone asks first, through Android's own installer.
 
 ## Git workflow and releases
 
