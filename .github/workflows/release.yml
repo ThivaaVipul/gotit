@@ -1,0 +1,236 @@
+# Publishes a release on every push to main that ships a change.
+#
+# Versions follow Conventional Commits since the last release tag:
+#   fix / perf / revert -> patch (0.1.1), feat -> minor (0.2.0),
+#   "feat!:" or "BREAKING CHANGE:" -> major (1.0.0).
+# Other types (docs, chore, ci, test, refactor, style, build) don't release, and
+# only commits that change app/ count. Counting starts at 0.0.0, so the first
+# feat ships 0.1.0.
+#
+# A release builds the signed arm64 APK (checked against the release key's
+# certificate, never the debug key the build falls back to) and the Windows
+# installer, then publishes both with their checksums as one GitHub Release.
+# The apps look for newer releases there. Run it by hand with "build only" to
+# test both builds and the signing without publishing anything.
+#
+# It runs only on pushes to main and by hand, never on pull requests, so the
+# signing key never reaches code from a fork.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_only:
+        description: Build and check both apps without publishing
+        type: boolean
+        default: true
+
+# One release at a time; never cancel one halfway.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # The release key's certificate (public). Every published APK must carry it.
+  RELEASE_CERT_SHA256: a9d28259484a13249fd16ea367509e964186812d31894d050517893bb12ecb37
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      build-number: ${{ steps.next.outputs.build_number }}
+      build: ${{ steps.gate.outputs.build }}
+      publish: ${{ steps.gate.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history and tags
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - id: next
+        run: python scripts/release/next_release.py
+
+      # Every release must be signed with the same key, so without it nothing is
+      # built and a due release is skipped with a warning instead of failing.
+      - id: gate
+        env:
+          DUE: ${{ steps.next.outputs.release }}
+          BUILD_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.build_only }}
+          HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            if [ "$DUE" = "true" ] || [ "$BUILD_ONLY" = "true" ]; then
+              echo "::warning::The signing key secrets are missing, so nothing was built."
+            fi
+            build=false; publish=false
+          elif [ "$BUILD_ONLY" = "true" ]; then
+            build=true; publish=false
+          else
+            build=$DUE; publish=$DUE
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: version
+    if: needs.version.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      BUILD_NUMBER: ${{ needs.version.outputs.build-number }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.2
+          channel: stable
+          cache: true
+
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/upload.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > app/android/key.properties
+
+      - name: Check and build
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          # 64-bit ARM only: about a third of the universal APK. Not --split-per-abi,
+          # which adds 2000 to the version code.
+          flutter build apk --release --target-platform android-arm64 \
+            --build-name "$VERSION" --build-number "$BUILD_NUMBER"
+
+      - name: Check the signature
+        run: |
+          apk=app/build/app/outputs/flutter-apk/app-release.apk
+          tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$tools/apksigner" verify --print-certs "$apk" | tee signers.txt
+          if ! grep -qi "certificate SHA-256 digest: $RELEASE_CERT_SHA256" signers.txt; then
+            echo "::error::The APK is not signed with the release key."
+            exit 1
+          fi
+          mkdir dist
+          cp "$apk" "dist/gotit-$VERSION.apk"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: dist/gotit-*.apk
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    if: needs.version.outputs.build == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.2
+          channel: stable
+          cache: true
+
+      # The Windows file version can't hold Android's build number (its parts
+      # stop at 65535), so Windows builds carry the version name only.
+      - name: Build
+        working-directory: app
+        shell: bash
+        run: |
+          flutter pub get
+          flutter build windows --release --build-name "$VERSION"
+
+      # Inno Setup comes with GitHub's Windows image.
+      - name: Installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" installer\gotit.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: dist/gotit-*-setup.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [version, android, windows]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # the tag and the GitHub Release
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Release notes
+        run: python scripts/release/next_release.py && cat release-notes.md
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          ls -l
+          sha256sum gotit-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+            # A create cut short by a GitHub error, after its upload, leaves
+            # a draft: publish it (a published release stays as it is).
+            gh release edit "$tag" --draft=false
+          else
+            gh release create "$tag" dist/* \
+              --target "$GITHUB_SHA" --title "Gotit $tag" --notes-file release-notes.md
+          fi

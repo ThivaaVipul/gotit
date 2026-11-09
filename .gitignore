@@ -1,3 +1,7 @@
+# Python (release tooling)
+__pycache__/
+*.py[cod]
+
 # Kotlin compiler sessions (created by Gradle builds)
 .kotlin/
 

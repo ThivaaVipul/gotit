@@ -15,7 +15,17 @@ flutter build apk --debug
 flutter build windows --debug
 ```
 
-Dart tests mirror `lib/` under `app/test/`.
+```bash
+# Release tooling, from the repo root (standard library only)
+python -m unittest discover -s scripts/release
+python scripts/release/next_release.py      # what the next release would be
+
+# Windows installer, from the repo root in PowerShell, after a release build in app/
+#   flutter build windows --release --build-name 0.1.0
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" "/DAppVersion=0.1.0" installer\gotit.iss
+```
+
+Dart tests mirror `lib/` under `app/test/`. Build output (`app/build/`, `dist/`) takes gigabytes: delete it after local checks.
 
 ## Architecture rules
 
@@ -30,6 +40,10 @@ Dart tests mirror `lib/` under `app/test/`.
 - Branches `feat/...`, `fix/...`, `docs/...`, `chore/...` off `main`; a pull request, CI green, then squash merge with a Conventional Commit title.
 - The commit type decides the release: `feat` is minor, `fix`/`perf`/`revert` patch, `!` or `BREAKING CHANGE:` major, everything else none. Pick the type honestly. Only commits that change `app/` count toward releases.
 - Never create `v*` tags by hand, and never change the version in `app/pubspec.yaml`: release builds get theirs from the release workflow.
+- A release (`release.yml`) builds the signed arm64 APK, checks that it carries the release key's certificate, builds the Windows installer (Inno Setup, per user), and publishes both with `SHA256SUMS.txt` as one GitHub Release, where the apps look for updates. Run it by hand with "build only" to test both builds without publishing.
+- Release logic lives in `scripts/release/` (Python, standard library only). Change it test-first.
+- The signing key stays outside the repo; the workflow gets it from the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` secrets and writes `app/android/key.properties` (git-ignored) at build time.
+- The installer's `AppId` in `installer/gotit.iss` never changes.
 
 ## Constraints
 

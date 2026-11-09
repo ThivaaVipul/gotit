@@ -67,7 +67,7 @@ Gotit shares what you copy between your Android phone and your Windows PC. Copy 
     - **M1a:** the project, CLAUDE.md and CI. No release.
     - **M1b:** the release pipeline and self-updates, shipping v0.1.0.
   - The stand-in screen on both shows the name, the version and the update state.
-  - The Android signing key stays outside the repo, in `Documents\gotit-signing`. You add its secrets to GitHub.
+  - The Android signing key stays outside the repo, in a private folder on the PC, with a backup. You add its secrets to GitHub.
   - The Windows installer is built with Inno Setup and installs per user, so no admin is needed. It isn't code-signed, so SmartScreen warns only on the first install from the browser.
   - CI on pull requests is one quick Ubuntu job: format, analyze and tests. Release builds run on Ubuntu (the APK) and on Windows (the installer).
   - Every git step waits for your OK: init, commits, creating the repo, pushes.
@@ -153,13 +153,15 @@ Each milestone gets a short grilling of its details before code.
     - a debug APK, and a Windows debug build that started and showed its "Gotit" window.
 
     It goes in as the first commit on main, since a new repo has nothing to open a pull request against.
-  - [ ] **M1b Releases:**
-    - the signing key and a signed APK;
-    - a per-user Windows installer;
-    - `release.yml`, which publishes both to GitHub Releases;
-    - self-updates: silent on the PC, a banner on the phone.
+  - [ ] **M1b Releases,** in two pull requests, so the pipeline is proven before anything ships:
+    - [ ] **M1b1 The pipeline:**
+      - the signing key, kept outside the repo, and a release-signed APK;
+      - the version tooling (17 tests);
+      - a per-user Windows installer (Inno Setup);
+      - `release.yml`, which builds the APK on Ubuntu and the installer on Windows, checks the APK's certificate, and publishes both with checksums.
 
-    Ships as v0.1.0.
+      Checked locally on 2026-11-09: a 14.5 MB arm64 APK at version 0.1.0 (code 1000), carrying the release certificate, and a 10.2 MB installer. No release from this change. Once merged and the secrets are added, a build-only run tests it on GitHub.
+    - [ ] **M1b2 Self-updates:** silent on the PC, a banner on the phone. Ships as v0.1.0.
 - [ ] **M2 Connecting, text and the switch:** starts with the look pass. Then:
   - discovery, and find-and-tap pairing with the 4-digit code (QR fallback);
   - the encrypted link, and copied text both ways;

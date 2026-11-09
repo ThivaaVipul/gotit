@@ -42,11 +42,13 @@ jobs:
           files=$(git diff --name-only HEAD^1 HEAD)
           echo "$files"
           # A change to this workflow checks everything.
-          if grep -qE '^app/|^\.github/workflows/ci\.yml$' <<< "$files"; then
-            echo "app=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "app=false" >> "$GITHUB_OUTPUT"
-          fi
+          has() {
+            if grep -qE "$1|^\.github/workflows/ci\.yml$" <<< "$files"; then echo true; else echo false; fi
+          }
+          {
+            echo "app=$(has '^app/')"
+            echo "tooling=$(has '^scripts/')"
+          } >> "$GITHUB_OUTPUT"
 
       - if: steps.changed.outputs.app == 'true'
         uses: subosito/flutter-action@v2
@@ -63,3 +65,14 @@ jobs:
           dart format --output=none --set-exit-if-changed lib test
           flutter analyze
           flutter test
+
+      # The release tooling: standard library only, so no installs.
+      - if: steps.changed.outputs.tooling == 'true'
+        uses: actions/setup-python@v7
+        with:
+          # The oldest supported version, so newer-only syntax fails here.
+          python-version: '3.12'
+
+      - if: steps.changed.outputs.tooling == 'true'
+        name: Release tooling
+        run: python -m unittest discover -s scripts/release -v
