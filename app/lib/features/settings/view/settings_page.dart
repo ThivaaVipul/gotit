@@ -5,7 +5,8 @@ import 'package:gotit/app/services.dart';
 import 'package:gotit/app/theme/gotit_colors.dart';
 import 'package:gotit/core/state/settings.dart';
 
-/// The PC's settings: its name, and starting with Windows.
+/// Settings: the paired device and Forget on both; on the PC also its name
+/// and starting with Windows.
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.services, super.key});
 
@@ -21,16 +22,34 @@ class SettingsPage extends StatelessWidget {
         builder: (context, settings, _) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
-            const _Section('This PC'),
-            Card(
-              child: Column(
-                children: [
-                  _NameField(services: services),
-                  const Divider(indent: 16, endIndent: 16),
-                  _StartWithWindows(services: services, settings: settings),
-                ],
+            if (settings.peer case final peer?) ...[
+              _Section(services.isPc ? 'Paired phone' : 'Paired PC'),
+              Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                  title: Text(peer.name),
+                  trailing: TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: () => _forget(context, peer.name),
+                    child: const Text('Forget'),
+                  ),
+                ),
               ),
-            ),
+            ],
+            if (services.isPc) ...[
+              const _Section('This PC'),
+              Card(
+                child: Column(
+                  children: [
+                    _NameField(services: services),
+                    const Divider(indent: 16, endIndent: 16),
+                    _StartWithWindows(services: services, settings: settings),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             Center(
               child: Text('Version ${services.version}', style: text.bodySmall),
@@ -39,6 +58,38 @@ class SettingsPage extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+extension on SettingsPage {
+  /// Asks first, then unpairs both devices (the other one is told when it is
+  /// connected) and goes back home.
+  Future<void> _forget(BuildContext context, String name) async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Forget $name?'),
+        content: const Text('To share again, pair the two again.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Forget'),
+          ),
+        ],
+      ),
+    );
+    if (sure != true || !context.mounted) return;
+    final navigator = Navigator.of(context);
+    await services.pcLink?.forget();
+    await services.phoneLink?.forget();
+    navigator.popUntil((route) => route.isFirst);
   }
 }
 

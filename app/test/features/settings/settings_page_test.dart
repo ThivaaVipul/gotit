@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotit/app/services.dart';
 import 'package:gotit/app/theme/gotit_theme.dart';
+import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
 import 'package:gotit/core/state/settings.dart';
 import 'package:gotit/core/update/updater.dart';
@@ -86,5 +87,23 @@ void main() {
     await tester.pump();
     expect(entry.isOn, isFalse);
     expect(settings.value.startWithWindows, isFalse);
+  });
+
+  testWidgets('Forget asks first, and Cancel keeps the pairing', (
+    tester,
+  ) async {
+    const phone = Peer(id: 'p', name: 'Test phone', certPem: 'x');
+    await tester.runAsync(() => settings.save(const Settings(peer: phone)));
+    await pump(tester);
+    expect(find.text('PAIRED PHONE'), findsOneWidget);
+    expect(find.text('Test phone'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Forget'));
+    await tester.pumpAndSettle();
+    expect(find.text('Forget Test phone?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Forget Test phone?'), findsNothing);
+    expect(settings.value.peer, phone);
   });
 }

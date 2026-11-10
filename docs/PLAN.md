@@ -211,7 +211,7 @@ Each milestone gets a short grilling of its details before code.
         - mutual TLS where each side trusts only the other's certificate;
         - a stranger's certificate, a missing one and a wrong server were all refused.
 
-        A server can't ask for a client certificate it doesn't know yet without refusing it. So every connection opens with one plain byte saying "pair" or "session", and the PC then starts TLS in that mode. It's all on one port.
+        A server can't ask for a client certificate it doesn't know yet without refusing it. While building M2b2 it turned out that it can ask without requiring one: a pairing phone shows no certificate, and the paired phone shows its pinned one. So it's one TLS port with no mode byte (details in ARCHITECTURE.md, "The link").
     - **M2b1, the PC shell** (its own pull request, a release):
       - **Tray icon** with Open and Quit (tray_manager). The sharing switch joins the menu in M2d.
       - **Closing the window** hides it to the tray.
@@ -231,7 +231,7 @@ Each milestone gets a short grilling of its details before code.
 
         `launch_at_startup` clashed with `package_info_plus` over `win32`, so the Run key is written directly. 38 tests, analysis clean, and Android and Windows builds pass.
     - **M2b2, pairing and the link** (its own pull request, a release):
-      - **Identity:** each device makes an EC P-256 key and a self-signed certificate on first run (basic_utils). The key is kept in flutter_secure_storage: Android Keystore on the phone, DPAPI on the PC.
+      - **Identity:** each device makes an EC P-256 key and a self-signed certificate on first run (basic_utils). The key is kept sealed: by DPAPI on the PC, and by an Android Keystore key on the phone. (flutter_secure_storage was dropped: its Windows part needs Visual Studio's ATL headers.)
       - **Discovery:** the PC advertises `_gotit._tcp` (bonsoir) with its ID, name and link version. The phone lists what it finds.
       - **Pairing by tap:**
         1. The phone connects in "pair" mode and records the PC's certificate.
@@ -253,6 +253,25 @@ Each milestone gets a short grilling of its details before code.
         - Forget is in settings on both, and tells the other side.
       - **The first time,** Windows asks whether Gotit may use private networks. Allow it, or the phone can't reach the PC.
       - **Tests:** framing, pairing codes, the QR payload, identity making, and two link ends over localhost TLS, covering pair, accept, decline, a stranger, a wrong code and a version mismatch.
+      - **Built locally on 2026-11-10:**
+        - the link (`lib/core/link/`) and mDNS (`lib/core/platform/mdns.dart`);
+        - the screens: on the phone, nearby PCs, the code, the scanner and home; on the PC, waiting with its QR code, the request sheet and home; Forget in Settings;
+        - the Slate motion from the mockups: the live ring around a connected device, the light sweeping the connected card, digits sharpening into focus, and the code lighting up once paired.
+
+        Found on the way:
+        - certificate dates must end before 2050 (a 2060 end read back as 1960);
+        - four code cells shared one key, which broke the code display; caught by the screen tests.
+
+        78 tests pass, analysis is clean, and the Android and Windows builds pass. The scanner uses Google Play services' barcode model, so the APK stays small.
+      - **Checked on the phone and this PC on 2026-11-10** with test builds. The phone build was signed with the release key, as 0.3.1, so v0.4.0 updates over it. All of these worked:
+        - the phone found the PC by mDNS;
+        - pairing by code with Accept, and pairing by QR code;
+        - a rename reaching the phone, and Forget from the phone;
+        - the phone linking again 2 to 4 seconds after the PC restarted.
+
+        Two fixes came out of it:
+        - the phone's name: MIUI keeps the model code in the standard setting and the real name in the Bluetooth name;
+        - a connection reset that went unhandled on the phone.
   - [ ] **M2c Text:** copied text both ways; the phone's copy watcher and its notification; the setup checklist.
   - [ ] **M2d Switch:** the shared switch in the app, the tile, the notification and the tray.
 - [ ] **M3 Images:** copied images both ways, and new phone screenshots to the PC.
