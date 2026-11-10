@@ -49,5 +49,12 @@ Source: "..\app\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ig
 ; The AppUserModelID lets Gotit's notifications show under its own name.
 Name: "{autoprograms}\Gotit"; Filename: "{app}\gotit.exe"; AppUserModelID: "app.gotit"
 
+[Registry]
+; Gotit adds itself to the per-user Run key when "Start with Windows" is on.
+; This entry creates nothing; it only removes that value on uninstall.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Gotit"; Flags: uninsdeletevalue
+
 [Run]
-Filename: "{app}\gotit.exe"; Description: "Open Gotit"; Flags: nowait postinstall
+; A self-update passes /RUNARGS=--hidden when Gotit was in the tray, so the new
+; version starts there too instead of opening its window.
+Filename: "{app}\gotit.exe"; Parameters: "{param:RUNARGS|}"; Description: "Open Gotit"; Flags: nowait postinstall

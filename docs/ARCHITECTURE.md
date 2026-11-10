@@ -150,7 +150,14 @@ Slate, picked in the look pass on 2026-11-10: dark-first and precise, with an in
 
 ## PC app (Windows)
 
-- **Window and tray:** the app starts hidden in the tray. Closing the window hides it again; Quit is in the tray menu, next to the switch and Open. Packages: `tray_manager` 0.8.3, plus `window_manager` (version to check).
+- **Window and tray** (`lib/app/desktop_shell.dart`, M2b1):
+  - **Packages:** `tray_manager` 0.5.3 and `window_manager` 0.5.2. Newer releases need Flutter 3.47, and `tray_manager` 0.6 was withdrawn.
+  - **Window:** the runner no longer shows the window by itself. Dart shows it, unless Gotit started with Windows (`--hidden`), when it stays in the tray. Closing the window hides it.
+  - **Tray:** clicking the icon brings the window back, and the menu has Open and Quit. The sharing switch joins the menu in M2d. Windows 11 puts a new tray icon in the overflow (the ^ arrow) until you drag it out or turn it on under Settings, Taskbar, Other system tray icons.
+  - **Two quirks, handled:**
+    - `tray_manager` adds the icon with whatever tooltip text it holds, and Windows keeps that first text as the app's name in its tray-icon list. So the tooltip is set before the icon.
+    - The engine's own teardown keeps the window on screen for about 9 seconds after a normal quit. So Quit hides the window, removes the tray icon and ends with `exit()`, as the self-update already does.
+  - **Updates:** the self-update passes `/RUNARGS=--hidden` to the setup when Gotit was in the tray, so the new version starts there too.
 - **Clipboard:** a small C++ plugin in the runner.
   - It listens with `AddClipboardFormatListener` (`WM_CLIPBOARDUPDATE`).
   - It reads text (`CF_UNICODETEXT`), images (the `PNG` format, or `CF_DIBV5` converted to PNG with WIC) and file lists (`CF_HDROP`), and writes text and images back.
@@ -158,18 +165,22 @@ Slate, picked in the look pass on 2026-11-10: dark-first and precise, with an in
   - No Rust and no extra packages.
 - **Sending files:**
   - Drag onto the window: `desktop_drop` 0.9.2.
-  - Explorer's Send to: the installer adds a "Gotit" shortcut to the SendTo folder. Its second launch hands the paths to the running app through `windows_single_instance` 1.2.0, then exits.
+  - Explorer's Send to: the installer adds a "Gotit" shortcut to the SendTo folder. Its second launch hands the paths to the running app through `windows_single_instance` 1.2.0 (in since M2b1, where a second launch shows the running window), then exits.
   - The hotkey: `hotkey_manager` 0.3.0 registers it, and the C++ plugin reads the copied file list. Folders are zipped before sending.
 - **Receiving files:** received files go to `Downloads\Gotit`. A toast with Open comes through `flutter_local_notifications` 23.0.0, whose Windows part supports buttons. Toasts need the installer's Start menu shortcut with Gotit's AppUserModelID.
-- **Start with Windows:** `launch_at_startup` 0.5.1 (per user, no admin).
-- **Package check:** the leanflutter desktop packages (tray, hotkey, start at login) are moving to native code built by build hooks. M1 checks that they build on this PC and on GitHub's Windows runner with the C++ tools only.
+- **Start with Windows** (`lib/core/platform/start_with_windows.dart`, M2b1):
+  - **How:** a value named Gotit in the per-user Run key, written with `win32_registry` 3.0.3. No admin is needed. (`launch_at_startup` needs an older `win32` than `package_info_plus` does, so it can't be used.)
+  - **Default:** the first launch of an installed copy turns it on. After that the setting in Settings sticks, and each launch rewrites the value so the path stays current.
+  - **Local builds** (0.0.0) never touch the Run key.
+  - **Uninstall:** the uninstaller removes the value.
+- **Package check:** the leanflutter desktop packages are moving to native code built by build hooks, in releases that need Flutter 3.47. Gotit stays on their classic releases until it moves Flutter. M2b1's release proves they build on GitHub's Windows runner with the C++ tools alone.
 
 ## What each device keeps
 
 - Its identity (key and certificate) and the paired peer's certificate and name.
 - The switch state.
 - The recent list: the last 20 items as JSON, holding kind, direction, time, a short preview (never for sensitive items) and the file location. Sensitive items are dropped after a minute.
-- Settings: the hotkey, and start with Windows.
+- Settings (`settings.json` in the app's support folder): the PC's name, start with Windows, and later the hotkey.
 
 Nothing else is stored, and nothing leaves the local network except the update check with GitHub. Logs never hold what was copied.
 

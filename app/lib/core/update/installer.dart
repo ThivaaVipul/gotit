@@ -46,6 +46,16 @@ class AndroidInstaller implements Installer {
 
 /// Runs the new setup silently and steps aside: the setup closes and restarts Gotit.
 class WindowsInstaller implements Installer {
+  WindowsInstaller({this.beforeExit, this.inTray});
+
+  /// Runs just before the app steps aside for the setup, such as removing the
+  /// tray icon.
+  final Future<void> Function()? beforeExit;
+
+  /// Whether the window is hidden in the tray. If so, the setup starts the
+  /// new version in the tray too, instead of opening its window.
+  final Future<bool> Function()? inTray;
+
   @override
   ReleaseAsset? assetOf(ReleaseInfo release) => release.setup;
 
@@ -54,13 +64,19 @@ class WindowsInstaller implements Installer {
 
   @override
   Future<InstallOutcome> install(File file) async {
-    await Process.start(file.path, const [
+    final hidden = await inTray?.call() ?? false;
+    await Process.start(file.path, [
       '/VERYSILENT',
       '/SUPPRESSMSGBOXES',
       '/NORESTART',
+      // Read by the setup's [Run] entry: start the new version in the tray.
+      if (hidden) '/RUNARGS=--hidden',
     ], mode: ProcessStartMode.detached);
     // Give the setup a moment to start, then let it replace our files.
-    Future<void>.delayed(const Duration(seconds: 1), () => exit(0));
+    Future<void>.delayed(const Duration(seconds: 1), () async {
+      await beforeExit?.call();
+      exit(0);
+    });
     return InstallOutcome.started;
   }
 }
