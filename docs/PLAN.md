@@ -1,7 +1,7 @@
 # Gotit plan
 
 Living document, updated as work proceeds. Last updated: 2026-11-09.
-Status: **M0 passed (2026-11-09): phone-to-PC copying can be automatic.** [ARCHITECTURE.md](ARCHITECTURE.md) is drafted, for review now that M0 is done. M1 is next. No repo yet.
+Status: **M1 done (2026-11-10): v0.1.0 is released and installed on the PC and the phone.** v0.1.1 tests the self-updates; M2 is next.
 
 Gotit shares what you copy between your Android phone and your Windows PC. Copy text or an image on one and it is ready to paste on the other; send files on purpose from either side. The two talk directly over the same Wi-Fi, with no server. Personal use, on free tools only.
 
@@ -145,23 +145,23 @@ Each milestone gets a short grilling of its details before code.
   - writing text and an image to the clipboard from the background, for PC to phone.
 
   The result decides phone to PC: automatic with this method, or one tap on the notification.
-- [ ] **M1 Foundation** (decisions above, under Foundation), in two pull requests:
-  - [ ] **M1a Project:** the repo, one Flutter app for Android and Windows with a stand-in screen, CLAUDE.md, the Claude tooling, and slim CI. No release. Built and checked locally on 2026-11-09:
+- [x] **M1 Foundation** (decisions above, under Foundation), in two pull requests:
+  - [x] **M1a Project:** the repo, one Flutter app for Android and Windows with a stand-in screen, CLAUDE.md, the Claude tooling, and slim CI. No release. Built and checked locally on 2026-11-09:
     - the app: Flutter 3.44.2, `app.gotit`, Android 10 or later, a 420x640 window on Windows;
     - a stand-in screen showing the name and the version (package_info_plus);
     - strict analysis, clean; 1 widget test;
     - a debug APK, and a Windows debug build that started and showed its "Gotit" window.
 
     It goes in as the first commit on main, since a new repo has nothing to open a pull request against.
-  - [ ] **M1b Releases,** in two pull requests, so the pipeline is proven before anything ships:
-    - [ ] **M1b1 The pipeline:**
+  - [x] **M1b Releases,** in two pull requests, so the pipeline is proven before anything ships:
+    - [x] **M1b1 The pipeline** (PR #1; a build-only run on GitHub built and checked both apps):
       - the signing key, kept outside the repo, and a release-signed APK;
       - the version tooling (17 tests);
       - a per-user Windows installer (Inno Setup);
       - `release.yml`, which builds the APK on Ubuntu and the installer on Windows, checks the APK's certificate, and publishes both with checksums.
 
       Checked locally on 2026-11-09: a 14.5 MB arm64 APK at version 0.1.0 (code 1000), carrying the release certificate, and a 10.2 MB installer. No release from this change. Once merged and the secrets are added, a build-only run tests it on GitHub.
-    - [ ] **M1b2 Self-updates:** silent on the PC, a banner on the phone. Ships as v0.1.0. Built locally on 2026-11-09, in plain Dart with small platform parts:
+    - [x] **M1b2 Self-updates** (PR #2, released as v0.1.0): silent on the PC, a banner on the phone. Ships as v0.1.0. Built locally on 2026-11-09, in plain Dart with small platform parts:
       - **Checks:** both apps ask GitHub for the latest release at start and every 6 hours.
       - **Downloads:** each download is checked against `SHA256SUMS.txt` and discarded on a mismatch.
       - **The phone:** shows "Version x is ready" with an Update button, then hands the APK to Android's installer. The first time, Android asks to allow installs from Gotit, and the screen says so.
@@ -227,3 +227,8 @@ Each milestone gets a short grilling of its details before code.
   - the Flutter app for Android and Windows, with a stand-in screen;
   - CLAUDE.md, README, CI on pull requests, and the Claude tooling;
   - LF endings, plain ASCII, nothing personal.
+- 2026-11-10: M1 done.
+  - PR #1 added the release pipeline. A build-only run on GitHub built the signed APK and the installer.
+  - PR #2 added self-updates and released v0.1.0. Its files were checked after download: checksums, the release certificate, and version 0.1.0 (code 1000).
+  - v0.1.0 is installed on the PC and the phone.
+  - v0.1.1 leaves out the copies of package:jni's library for other CPUs (0.2 MB), so release APKs are arm64 only. It is also the first update the apps install themselves.
