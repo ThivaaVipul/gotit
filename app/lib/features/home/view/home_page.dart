@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:gotit/app/theme/gotit_colors.dart';
+import 'package:gotit/app/theme/gotit_motion.dart';
+import 'package:gotit/app/widgets/catch_mark.dart';
 import 'package:gotit/core/update/updater.dart';
 
 /// Stand-in home screen: the name, the version and updates, until M2's real screens.
@@ -11,23 +14,40 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final colors = GotitColors.of(context);
+    final motion = GotitMotion.of(context);
     return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Gotit', style: text.headlineLarge),
-              const SizedBox(height: 8),
-              Text('Version $version', style: text.bodyMedium),
-              const SizedBox(height: 24),
-              ValueListenableBuilder<UpdateState>(
-                valueListenable: updater,
-                builder: (context, state, _) =>
-                    _UpdateLine(state: state, updater: updater),
-              ),
-            ],
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CatchMark(size: 76, play: true),
+                const SizedBox(height: 22),
+                Text('Gotit', style: text.headlineMedium),
+                const SizedBox(height: 4),
+                Text(
+                  'Version $version',
+                  style: text.bodyMedium?.copyWith(color: colors.muted),
+                ),
+                const SizedBox(height: 28),
+                ValueListenableBuilder<UpdateState>(
+                  valueListenable: updater,
+                  builder: (context, state, _) => AnimatedSwitcher(
+                    duration: motion.enter,
+                    reverseDuration: motion.exit,
+                    switchInCurve: GotitMotion.arrive,
+                    switchOutCurve: GotitMotion.leave,
+                    child: KeyedSubtree(
+                      key: ValueKey(state.runtimeType),
+                      child: _UpdateLine(state: state, updater: updater),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -60,7 +80,13 @@ class _UpdateLine extends StatelessWidget {
         children: [
           line('Downloading $version'),
           const SizedBox(height: 8),
-          SizedBox(width: 160, child: LinearProgressIndicator(value: progress)),
+          SizedBox(
+            width: 160,
+            child: LinearProgressIndicator(
+              value: progress,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
         ],
       ),
       UpdateInstalling(:final version) => line('Installing $version'),

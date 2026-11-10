@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Slate's background, behind the splash and the app while it starts. -->
+    <color name="gotit_bg">#FFF7F7F9</color>
+</resources>

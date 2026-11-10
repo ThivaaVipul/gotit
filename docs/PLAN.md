@@ -1,7 +1,7 @@
 # Gotit plan
 
-Living document, updated as work proceeds. Last updated: 2026-11-09.
-Status: **M1 done (2026-11-10): v0.1.0 is released and installed on the PC and the phone.** v0.1.1 tests the self-updates; M2 is next.
+Living document, updated as work proceeds. Last updated: 2026-11-10.
+Status: **M1 done (2026-11-10).** v0.1.1 updated both apps by themselves. **M2 grilled (2026-11-10); M2a, the look pass, is under way.**
 
 Gotit shares what you copy between your Android phone and your Windows PC. Copy text or an image on one and it is ready to paste on the other; send files on purpose from either side. The two talk directly over the same Wi-Fi, with no server. Personal use, on free tools only.
 
@@ -71,6 +71,35 @@ Gotit shares what you copy between your Android phone and your Windows PC. Copy 
   - The Windows installer is built with Inno Setup and installs per user, so no admin is needed. It isn't code-signed, so SmartScreen warns only on the first install from the browser.
   - CI on pull requests is one quick Ubuntu job: format, analyze and tests. Release builds run on Ubuntu (the APK) and on Windows (the installer).
   - Every git step waits for your OK: init, commits, creating the repo, pushes.
+
+### Connecting, text and the switch (M2 grilling, 2026-11-10)
+
+- **Look pass:** one local HTML page, outside the repo, with 3 directions. Each is shown on the phone home screen, the pairing code and the PC window, in light and dark, with a matching icon. The pick is written into the docs and the page is deleted.
+- **Icon:** the chosen one goes on the phone launcher (adaptive, plus Android's themed icon), the PC window and taskbar, the installer, and the tray, with an on and a greyed-out off version.
+- **Theme:** follows each device's system setting, light or dark.
+- **QR fallback:** built in M2.
+  - The PC window has "Show QR code", and the phone has "Scan QR code" under its list.
+  - The QR carries the PC's address, its certificate fingerprint and a one-time token, so scanning pairs at once: no code to compare and no Accept.
+- **Phone first run:** pairing first, so PC-to-phone copying works right away. Then a checklist on the home screen walks through the setup steps for phone-to-PC copying, and stays until they're done.
+- **PC name:** the Windows name at first, renamable in the PC app's settings. The phone shows its own device name.
+- **Sent sign:** quiet. The phone's notification text changes to "Sent to <PC>" with no sound or pop-up; the PC's tray icon shows a check for about a second. Arrivals stay silent.
+- **Four pull requests, each a release, each checked on the devices before the next:**
+  - **M2a** the look and the icon;
+  - **M2b** the tray, starting with Windows, and pairing (find-and-tap and QR);
+  - **M2c** text both ways: the phone's copy watcher, its notification and the setup checklist;
+  - **M2d** the shared switch: app, tile, notification and tray.
+- **The look, picked (2026-11-10, after two rounds of mockups):**
+  - **Slate:** dark-first and precise, like a pro tool. Inter, 12 px corners, hairlines, and an indigo-to-violet gradient for anything live. Light and dark follow the system.
+  - **Motion:** a light beam runs along the link between the two devices when a copy crosses. A slow sweep circles the connected card, and pairing digits sharpen into focus. A spring switch, a live ring around the other device, and setup checks that draw themselves. Timings are in ARCHITECTURE.md under "Look".
+  - **Icon: Catch,** a ball flying into a C-shaped catch: the moment a copy lands. A white C and an indigo ball on a deep slate tile.
+  - Round 1 (Ink, Pulse, Native) and the other round 2 directions (Aurora, Signal) and icons were turned down.
+- **Defaults** (change any of them):
+  - A pairing request brings the PC window to the front with the code and Accept / Decline; it expires after 60 seconds.
+  - Forget, in the settings on either side, unpairs both.
+  - The PC window opens on first run. After that Gotit starts hidden in the tray at sign-in (on by default, a switch in settings). Closing the window hides it; Quit is in the tray menu.
+  - The phone keeps one quiet notification: "Connected to <PC>", "Looking for <PC>" or "Sharing off", with Send and Turn off (Turn on while off).
+  - Text crosses as plain text. Its sensitive flag goes along, so the receiving side keeps it out of Windows clipboard history and hides Android's clipboard preview. The dots in the recent list come in M5.
+  - If the two apps' link versions differ, both say "Update Gotit on <device>" and sharing waits.
 
 ### Phone copy test results (M0, 2026-11-09)
 
@@ -168,11 +197,15 @@ Each milestone gets a short grilling of its details before code.
       - **The PC:** runs the new setup silently and steps aside; the setup restarts Gotit, which then shows "Updated". A proper notice comes with the tray in M2.
       - **Local builds (0.0.0)** never update.
       - **Checks:** 20 tests, analysis clean, and Android and Windows builds pass.
-- [ ] **M2 Connecting, text and the switch:** starts with the look pass. Then:
-  - discovery, and find-and-tap pairing with the 4-digit code (QR fallback);
-  - the encrypted link, and copied text both ways;
-  - the shared switch: app, tile, notification and tray;
-  - the phone's guided setup, and starting with Windows.
+- [ ] **M2 Connecting, text and the switch** (decisions above), in four pull requests:
+  - [ ] **M2a Look:** three directions on one HTML page, then the chosen theme (light and dark) and the icon everywhere. Picked Slate with the Catch icon. Built locally on 2026-11-10:
+    - the Slate theme (`lib/app/theme/`): palette, Inter, motion timings, light and dark;
+    - the Catch icon on the Android launcher (vector, with a themed version), the splash, the Windows window, taskbar and installer;
+    - `CatchMark`, which draws the icon in the app and plays the catch on the stand-in home screen;
+    - 26 tests, analysis clean, and Android and Windows debug builds pass. The Windows window was checked by eye.
+  - [ ] **M2b Pairing:** the tray and starting with Windows; discovery, find-and-tap pairing with the 4-digit code, and the QR fallback; the encrypted link.
+  - [ ] **M2c Text:** copied text both ways; the phone's copy watcher and its notification; the setup checklist.
+  - [ ] **M2d Switch:** the shared switch in the app, the tile, the notification and the tray.
 - [ ] **M3 Images:** copied images both ways, and new phone screenshots to the PC.
 - [ ] **M4 Files:**
   - phone: the share sheet;
@@ -232,3 +265,6 @@ Each milestone gets a short grilling of its details before code.
   - PR #2 added self-updates and released v0.1.0. Its files were checked after download: checksums, the release certificate, and version 0.1.0 (code 1000).
   - v0.1.0 is installed on the PC and the phone.
   - v0.1.1 leaves out the copies of package:jni's library for other CPUs (0.2 MB), so release APKs are arm64 only. It is also the first update the apps install themselves.
+- 2026-11-10: v0.1.1 released. Both apps were put back to 0.1.0 and updated themselves: the PC silently, restarting itself, and the phone through Android's installer. Both then showed "Version 0.1.1 / Updated".
+- 2026-11-10: M2 grilled; the decisions are under "Connecting, text and the switch" above. The QR fallback stays in M2, and M2 ships as four pull requests.
+- 2026-11-10: Look pass. Round 1 offered Ink, Pulse and Native; you leaned to Pulse but asked for more professional designs with real motion and new icons. Round 2 offered Slate, Aurora and Signal, each animated, plus twelve icon ideas. Picked: Slate with the Catch icon.
