@@ -92,24 +92,53 @@ Slate, picked in the look pass on 2026-11-10: dark-first and precise, with an in
 
 ## The link
 
-- **Discovery:** the PC advertises `_gotit._tcp` over mDNS with its name, device ID and port. The phone browses for it, and also remembers the last address that worked. Package: `bonsoir` 7.1.6, which covers Android and Windows.
-- **Identity:** on first run each device makes a key pair and a self-signed certificate, using `basic_utils` 5.8.2 (pure Dart). The private key lives in the platform's secure storage (Android Keystore, Windows DPAPI).
-- **Pairing:**
-  1. The phone lists the PC and you tap it.
-  2. The two connect over TLS without trusting each other yet.
-  3. Each side shows a 4-digit code taken from a hash of both certificates. A device in the middle would have to match it (1 in 10,000).
-  4. Accept on the PC, plus the tap on the phone, pins each other's certificate.
-  5. Pairing again replaces the old pair, since it is one to one.
-- **Session:** mutual TLS (`dart:io` `SecureServerSocket` and `SecureSocket`). Each side trusts exactly one certificate, the other's, and nothing else is accepted. The phone reconnects when Wi-Fi changes, backing off between tries. A ping every 30 seconds keeps the connection alive and notices drops.
-- **Protocol:** length-prefixed frames, each a small JSON header plus an optional binary body.
+Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two link ends talking TLS over localhost.
+
+- **Discovery** (`bonsoir` 7.1.5; `lib/core/platform/mdns.dart`):
+  - The PC advertises `_gotit._tcp` under its name, with its device ID and link version in the TXT record.
+  - The phone browses while the app runs: to list PCs before pairing, and to find the paired PC again if its address changes. It also remembers the last address that worked.
+  - Only resolved IPv4 addresses, and IPv6 ones that aren't link-local, are dialled.
+- **Identity** (`identity.dart`):
+  - On first run each device makes an EC P-256 key and a self-signed certificate with `basic_utils` 5.8.2 (pure Dart, off the UI thread).
+  - It is kept sealed in the app's own folder (`lib/core/platform/secrets.dart`):
+    - on the PC, by DPAPI through `win32` (only this Windows user can open it);
+    - on the phone, by an AES-GCM key that never leaves the Android Keystore (`Sealer.kt`).
+
+    `flutter_secure_storage` was the plan, but its Windows part needs Visual Studio's ATL headers. The app has no cloud backup, since a restored key wouldn't open anyway.
+  - The certificate is valid from 2020 to the end of 2049. Clocks that disagree can't make it look not yet valid, and 2049 is the last year a certificate stores in two digits. A 2060 end date reads back as 1960, which made every certificate look expired.
+- **One TLS port** (`pc_link.dart`), 47331 when free, with any free port as a fallback.
+  - The PC asks every connection for a client certificate but doesn't require one.
+  - A phone that is pairing shows none and can only ask to pair.
+  - The paired phone shows its pinned certificate: TLS checks it against the PC's trust list, then the PC checks the pin as well.
+  - A certificate the PC doesn't trust ends the handshake. Pairing adds the new phone to the live trust list, so no restart is needed.
+- **Pairing, by tap** (`phone_link.dart`, `pairing.dart`):
+  1. The phone connects without a certificate and records the PC's certificate.
+  2. Inside TLS it sends `pair.req` with its ID, name, certificate and link version.
+  3. The PC answers `pair.wait`. Both now show the same 4-digit code, made from a hash of both certificates' fingerprints. A device in the middle has its own certificate, so the two codes wouldn't match (1 in 10,000).
+  4. Accept on the PC sends `pair.ok`, and each side keeps the other's certificate. Decline, 60 seconds without an answer, or a second phone asking at the same time ends it with `pair.no`.
+  5. Pairing again replaces the old pair: it is one to one.
+- **Pairing, by QR code:**
+  - The PC's code holds its addresses, port, certificate fingerprint and a one-time token that lasts 5 minutes.
+  - The phone connects only to a PC with that fingerprint and sends the token, and the PC pairs at once, with no code and no Accept. A used or expired token gets `pair.no`.
+- **Session:**
+  - Mutual TLS, then a `hello` from each side with its ID, name and link version (`LinkSpec.version`, now 1).
+  - Different versions keep the link up but share nothing, and both screens say which device to update.
+  - A ping every 30 seconds, and 75 seconds of silence counts as a lost link.
+  - The phone reconnects with backoff (1, 2, 5, 10, 20, then every 30 seconds), and tries again at once when the app comes to the front or mDNS sees the PC.
+  - Forget on either side sends `bye`, and the other side forgets too.
+- **Frames** (`frame.dart`):
+  - Each frame is a 4-byte header length, a JSON header whose `t` is the type, a 4-byte body length, and the body.
+  - Headers are capped at 64 KiB and bodies at 2 MiB. Anything malformed ends the connection.
 
   | Frame | Carries |
   | --- | --- |
-  | `hello` | device ID, name, app and protocol version |
-  | `switch` | on or off, when it changed, which device changed it |
-  | `clip` | text or PNG image, copied-at time, a sensitive flag, a link flag |
-  | `file.offer`, `file.chunk`, `file.done` (SHA-256), `file.cancel` | a file in 256 KiB chunks |
-  | `ack`, `ping`, `pong` | delivery and liveness |
+  | `pair.req`, `pair.wait`, `pair.ok`, `pair.no` | pairing, above |
+  | `hello` | device ID, name and link version |
+  | `bye` | the other side forgot this pairing |
+  | `ping`, `pong` | liveness |
+  | `switch` (M2d) | on or off, when it changed, which device changed it |
+  | `clip` (M2c, M3) | text or PNG image, copied-at time, a sensitive flag, a link flag |
+  | `file.offer`, `file.chunk`, `file.done` (SHA-256), `file.cancel` (M4) | a file in 256 KiB chunks |
 
   Text clips are capped at 1 MiB. A bigger image goes as a file.
 - **Live only:** nothing is queued. A copy made while the two aren't connected is dropped (PLAN decision).
@@ -177,7 +206,7 @@ Slate, picked in the look pass on 2026-11-10: dark-first and precise, with an in
 
 ## What each device keeps
 
-- Its identity (key and certificate) and the paired peer's certificate and name.
+- Its identity (key and certificate), in the platform's secure storage, and in `settings.json` the paired device's ID, name and certificate (plus, on the phone, the PC's last address).
 - The switch state.
 - The recent list: the last 20 items as JSON, holding kind, direction, time, a short preview (never for sensitive items) and the file location. Sensitive items are dropped after a minute.
 - Settings (`settings.json` in the app's support folder): the PC's name, start with Windows, and later the hotkey.

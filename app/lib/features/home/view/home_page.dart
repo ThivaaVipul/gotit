@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:gotit/app/services.dart';
-import 'package:gotit/app/theme/gotit_colors.dart';
 import 'package:gotit/app/theme/gotit_motion.dart';
 import 'package:gotit/app/widgets/catch_mark.dart';
 import 'package:gotit/core/update/updater.dart';
+import 'package:gotit/features/home/widgets/link_hero.dart';
 import 'package:gotit/features/settings/view/settings_page.dart';
 
-/// Stand-in home screen: the name, the version and updates, until M2's real screens.
+/// Home, on both devices: the link to the other one, updates, the version.
 class HomePage extends StatelessWidget {
   const HomePage({required this.services, super.key});
 
@@ -15,58 +15,59 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final colors = GotitColors.of(context);
     final motion = GotitMotion.of(context);
     final updater = services.updater;
+    final pcLink = services.pcLink;
     return Scaffold(
-      appBar: services.isPc
-          ? AppBar(
-              actions: [
-                IconButton(
-                  tooltip: 'Settings',
-                  icon: const Icon(Icons.settings_outlined),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => SettingsPage(services: services),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-              ],
-            )
-          : null,
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CatchMark(size: 76, play: true),
-                const SizedBox(height: 22),
-                Text('Gotit', style: text.headlineMedium),
-                const SizedBox(height: 4),
-                Text(
-                  'Version ${services.version}',
-                  style: text.bodyMedium?.copyWith(color: colors.muted),
-                ),
-                const SizedBox(height: 28),
-                ValueListenableBuilder<UpdateState>(
-                  valueListenable: updater,
-                  builder: (context, state, _) => AnimatedSwitcher(
-                    duration: motion.enter,
-                    reverseDuration: motion.exit,
-                    switchInCurve: GotitMotion.arrive,
-                    switchOutCurve: GotitMotion.leave,
-                    child: KeyedSubtree(
-                      key: ValueKey(state.runtimeType),
-                      child: _UpdateLine(state: state, updater: updater),
-                    ),
-                  ),
-                ),
-              ],
+      appBar: AppBar(
+        titleSpacing: 20,
+        title: Row(
+          children: [
+            const CatchMark(size: 26, play: true),
+            const SizedBox(width: 10),
+            Text('Gotit', style: text.titleMedium),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SettingsPage(services: services),
+              ),
             ),
           ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            if (pcLink != null) PcLinkHero(link: pcLink),
+            if (services.phoneLink != null) const PhoneLinkHero(),
+            const SizedBox(height: 24),
+            Center(
+              child: ValueListenableBuilder<UpdateState>(
+                valueListenable: updater,
+                builder: (context, state, _) => AnimatedSwitcher(
+                  duration: motion.enter,
+                  reverseDuration: motion.exit,
+                  switchInCurve: GotitMotion.arrive,
+                  switchOutCurve: GotitMotion.leave,
+                  child: KeyedSubtree(
+                    key: ValueKey(state.runtimeType),
+                    child: _UpdateLine(state: state, updater: updater),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text('Version ${services.version}', style: text.bodySmall),
+            ),
+          ],
         ),
       ),
     );
