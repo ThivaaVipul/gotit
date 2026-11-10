@@ -52,6 +52,19 @@ android {
     }
 }
 
+// Release APKs are arm64 only (--target-platform android-arm64), but some
+// packages ship native libraries for every ABI (package:jni's libdartjni.so):
+// leave the others out.
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.packaging.jniLibs.excludes.addAll(
+            "lib/armeabi-v7a/**",
+            "lib/x86/**",
+            "lib/x86_64/**",
+        )
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
