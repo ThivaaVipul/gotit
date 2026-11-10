@@ -15,6 +15,10 @@ dependencies:
     sdk: flutter
   package_info_plus: ^10.2.2
   path_provider: ^2.1.6
+  tray_manager: ^0.5.3
+  win32_registry: ^3.0.3
+  window_manager: ^0.5.2
+  windows_single_instance: ^1.2.0
 
 dev_dependencies:
   flutter_test:
@@ -25,6 +29,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/OFL.txt
+    - assets/tray/gotit.ico
   # Inter 4.1, static weights subset to Latin (see docs/ARCHITECTURE.md, "Look").
   fonts:
     - family: Inter

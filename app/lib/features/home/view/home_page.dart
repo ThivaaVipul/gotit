@@ -1,22 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:gotit/app/services.dart';
 import 'package:gotit/app/theme/gotit_colors.dart';
 import 'package:gotit/app/theme/gotit_motion.dart';
 import 'package:gotit/app/widgets/catch_mark.dart';
 import 'package:gotit/core/update/updater.dart';
+import 'package:gotit/features/settings/view/settings_page.dart';
 
 /// Stand-in home screen: the name, the version and updates, until M2's real screens.
 class HomePage extends StatelessWidget {
-  const HomePage({required this.version, required this.updater, super.key});
+  const HomePage({required this.services, super.key});
 
-  final String version;
-  final Updater updater;
+  final AppServices services;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final colors = GotitColors.of(context);
     final motion = GotitMotion.of(context);
+    final updater = services.updater;
     return Scaffold(
+      appBar: services.isPc
+          ? AppBar(
+              actions: [
+                IconButton(
+                  tooltip: 'Settings',
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => SettingsPage(services: services),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+            )
+          : null,
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -29,7 +47,7 @@ class HomePage extends StatelessWidget {
                 Text('Gotit', style: text.headlineMedium),
                 const SizedBox(height: 4),
                 Text(
-                  'Version $version',
+                  'Version ${services.version}',
                   style: text.bodyMedium?.copyWith(color: colors.muted),
                 ),
                 const SizedBox(height: 28),

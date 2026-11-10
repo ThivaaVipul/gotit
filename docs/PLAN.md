@@ -1,7 +1,7 @@
 # Gotit plan
 
 Living document, updated as work proceeds. Last updated: 2026-11-10.
-Status: **M1 done (2026-11-10).** v0.1.1 updated both apps by themselves. **M2 grilled (2026-11-10); M2a, the look pass, is under way.**
+Status: **M1 done (2026-11-10).** v0.1.1 updated both apps by themselves. **M2 grilled (2026-11-10). M2a, the look, shipped as v0.2.0; M2b1, the PC shell, is built.**
 
 Gotit shares what you copy between your Android phone and your Windows PC. Copy text or an image on one and it is ready to paste on the other; send files on purpose from either side. The two talk directly over the same Wi-Fi, with no server. Personal use, on free tools only.
 
@@ -198,12 +198,61 @@ Each milestone gets a short grilling of its details before code.
       - **Local builds (0.0.0)** never update.
       - **Checks:** 20 tests, analysis clean, and Android and Windows builds pass.
 - [ ] **M2 Connecting, text and the switch** (decisions above), in four pull requests:
-  - [ ] **M2a Look:** three directions on one HTML page, then the chosen theme (light and dark) and the icon everywhere. Picked Slate with the Catch icon. Built locally on 2026-11-10:
+  - [x] **M2a Look** (PR #4, released as v0.2.0, which both apps installed by themselves): three directions on one HTML page, then the chosen theme (light and dark) and the icon everywhere. Picked Slate with the Catch icon. Built on 2026-11-10:
     - the Slate theme (`lib/app/theme/`): palette, Inter, motion timings, light and dark;
     - the Catch icon on the Android launcher (vector, with a themed version), the splash, the Windows window, taskbar and installer;
     - `CatchMark`, which draws the icon in the app and plays the catch on the stand-in home screen;
     - 26 tests, analysis clean, and Android and Windows debug builds pass. The Windows window was checked by eye.
-  - [ ] **M2b Pairing:** the tray and starting with Windows; discovery, find-and-tap pairing with the 4-digit code, and the QR fallback; the encrypted link.
+  - [ ] **M2b Pairing:** the tray and starting with Windows; discovery, find-and-tap pairing with the 4-digit code, and the QR fallback; the encrypted link. Plan (2026-11-10):
+    - **Checked first:**
+      - Flutter here and in CI is 3.44.2 (Dart 3.12). The newest bonsoir, tray_manager and window_manager need Flutter 3.47, so M2b uses the newest that fit: bonsoir 7.1.5, tray_manager 0.6.1 and window_manager 0.5.2. Moving Flutter itself is a separate change.
+      - A throwaway test of `dart:io` TLS with self-signed certificates on this PC passed:
+        - a pairing connection where only the PC proves itself, and the phone pins its certificate;
+        - mutual TLS where each side trusts only the other's certificate;
+        - a stranger's certificate, a missing one and a wrong server were all refused.
+
+        A server can't ask for a client certificate it doesn't know yet without refusing it. So every connection opens with one plain byte saying "pair" or "session", and the PC then starts TLS in that mode. It's all on one port.
+    - **M2b1, the PC shell** (its own pull request, a release):
+      - **Tray icon** with Open and Quit (tray_manager). The sharing switch joins the menu in M2d.
+      - **Closing the window** hides it to the tray.
+      - **Only one copy runs** (windows_single_instance). Opening Gotit again brings the window back.
+      - **Starting with Windows,** on by default (a Run key value; see below). It starts hidden in the tray.
+      - **Settings:** the PC's name (the Windows name at first) and start with Windows.
+      - This also proves the desktop packages build on GitHub's Windows runner with the C++ tools alone.
+      - Built locally on 2026-11-10 and checked on this PC with debug and release builds:
+        - a normal start shows the window, and `--hidden` keeps it in the tray;
+        - closing hides it, and a second launch brings the first copy back and quits;
+        - a tray click shows the window, and Quit ends the app in 0.16 seconds;
+        - the tray icon's first tooltip reads "Gotit".
+
+        Two quirks were found and fixed (details in ARCHITECTURE.md, "Window and tray"):
+        - the plugin added the tray icon with garbage tooltip text;
+        - a normal quit kept the window up for about 9 seconds.
+
+        `launch_at_startup` clashed with `package_info_plus` over `win32`, so the Run key is written directly. 38 tests, analysis clean, and Android and Windows builds pass.
+    - **M2b2, pairing and the link** (its own pull request, a release):
+      - **Identity:** each device makes an EC P-256 key and a self-signed certificate on first run (basic_utils). The key is kept in flutter_secure_storage: Android Keystore on the phone, DPAPI on the PC.
+      - **Discovery:** the PC advertises `_gotit._tcp` (bonsoir) with its ID, name and link version. The phone lists what it finds.
+      - **Pairing by tap:**
+        1. The phone connects in "pair" mode and records the PC's certificate.
+        2. It sends its own certificate and name inside the encrypted channel.
+        3. Both show a 4-digit code made from a hash of both certificates. A device in the middle can't make the two codes match.
+        4. You tap Accept on the PC, the window having come to the front. Each side then pins the other.
+      - **Pairing by QR:**
+        - The PC shows a code holding its addresses, port, certificate fingerprint and a one-time token that expires in 5 minutes.
+        - The phone scans it (mobile_scanner, using Google Play services' scanner, so the APK stays small). It checks the fingerprint and sends the token, and they're paired with no code to compare.
+        - The camera is asked for only when you tap Scan.
+      - **Session:** mutual TLS in "session" mode.
+        - A hello carries the link version. If the versions differ, both apps say to update.
+        - A ping every 30 seconds keeps the link alive.
+        - The phone reconnects with backoff, using mDNS and the last address that worked.
+        - In M2b2 the phone keeps the link only while the app is open. The background service comes with M2c.
+      - **Screens:**
+        - Phone: the nearby-PCs list with Scan QR code, the pairing code, and home with the PC's name and the live link.
+        - PC: waiting for your phone with Show QR code, the pairing request, and home with the phone's name.
+        - Forget is in settings on both, and tells the other side.
+      - **The first time,** Windows asks whether Gotit may use private networks. Allow it, or the phone can't reach the PC.
+      - **Tests:** framing, pairing codes, the QR payload, identity making, and two link ends over localhost TLS, covering pair, accept, decline, a stranger, a wrong code and a version mismatch.
   - [ ] **M2c Text:** copied text both ways; the phone's copy watcher and its notification; the setup checklist.
   - [ ] **M2d Switch:** the shared switch in the app, the tile, the notification and the tray.
 - [ ] **M3 Images:** copied images both ways, and new phone screenshots to the PC.
@@ -268,3 +317,5 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-10: v0.1.1 released. Both apps were put back to 0.1.0 and updated themselves: the PC silently, restarting itself, and the phone through Android's installer. Both then showed "Version 0.1.1 / Updated".
 - 2026-11-10: M2 grilled; the decisions are under "Connecting, text and the switch" above. The QR fallback stays in M2, and M2 ships as four pull requests.
 - 2026-11-10: Look pass. Round 1 offered Ink, Pulse and Native; you leaned to Pulse but asked for more professional designs with real motion and new icons. Round 2 offered Slate, Aurora and Signal, each animated, plus twelve icon ideas. Picked: Slate with the Catch icon.
+- 2026-11-10: M2a merged (PR #4) and released as v0.2.0. Both apps updated themselves and came back in Slate with the Catch icon.
+- 2026-11-10: M2b planned in two parts, after checking package versions and testing TLS with self-signed certificates. M2b1, the PC shell, was built and checked on this PC.
