@@ -1,6 +1,6 @@
 # Gotit architecture
 
-Status: **draft (2026-11-09), ready for review.** The phone-to-PC copy part is updated with M0's results. Package versions are from pub.dev on 2026-11-09 and get checked against current docs before each is added.
+Status: **draft (2026-11-09), ready for review.** The phone-to-PC copy part is updated with M0's results, and the look with M2a's (2026-11-10). Package versions are from pub.dev on 2026-11-09 and get checked against current docs before each is added.
 
 ## Overview
 
@@ -38,7 +38,57 @@ installer/              Inno Setup script for the Windows installer
 scripts/release/        version and release notes from Conventional Commits
 .github/workflows/      ci.yml (pull requests), release.yml (main)
 docs/                   PLAN.md, ARCHITECTURE.md
+docs/brand/             the icon's sources (SVG)
 ```
+
+## Look
+
+Slate, picked in the look pass on 2026-11-10: dark-first and precise, with an indigo-to-violet gradient for anything live. Light and dark follow the system.
+
+- **Where it lives:** `lib/app/theme/`.
+  - `GotitColors` is the palette, kept as a theme extension.
+  - `GotitMotion` holds the timings.
+  - `gotitTheme(brightness)` builds Material 3 on top of both.
+
+  Widgets take colours, text styles and timings from these, never hard-coded values.
+- **Palette:**
+
+  | Token | Light | Dark | Used for |
+  | --- | --- | --- | --- |
+  | bg | `#F7F7F9` | `#0A0B0E` | window and screen background |
+  | surface | `#FFFFFF` | `#111318` | cards and lists |
+  | surface2 | `#F1F2F5` | `#181B22` | raised surfaces, tracks |
+  | fg | `#0B0C10` | `#ECEEF2` | text |
+  | muted | `#5F6576` | `#8A90A2` | secondary text and icons |
+  | line | `#E4E5EA` | `#22262F` | hairlines and borders |
+  | accent | `#4F5BEF` | `#7C86FF` | actions, links, live things |
+  | accent2 | `#8B5CF6` | `#B18CFF` | the violet end of the live gradient |
+  | ok | `#12A150` | `#3DD68C` | connected, done |
+
+- **Type:** Inter 4.1 in four static weights (400, 500, 600, 700).
+  - Each is subset to Latin with fonttools' `pyftsubset`: Basic Latin through Latin Extended-A, plus punctuation, currency signs and arrows. Layout features are kept, so tabular figures work. That brings each weight to about 110 KB.
+  - Other scripts fall back to the system font.
+  - The font's licence (`assets/fonts/OFL.txt`) ships with it and appears on the app's licence page.
+- **Shape:** 12 px corners on cards, 10 px on controls, 1 px hairlines, no shadows.
+- **Motion** (`GotitMotion`). When the system asks for less motion, every duration is zero and loops stop.
+
+  | Motion | Time | Curve | Where |
+  | --- | --- | --- | --- |
+  | A copy crossing | 900 ms | `move` (easeInOutCubic) | a light beam along the link, then a small bump on the other device |
+  | Switch | 320 ms | `spring` (easeOutBack) | sharing on and off |
+  | Arrive | 280 ms | `arrive` (easeOutCubic) | notes, new recent items, toasts |
+  | Leave | 180 ms | `leave` (easeInCubic) | the same, going away |
+  | Tick | 300 ms | `move` | setup checks drawing in, progress growing |
+  | Stagger | 70 ms apart | | pairing digits sharpening into focus |
+  | Catch | 1 s | | the icon's ball flying in, once, on the home screen |
+  | Live ring | 2.4 s loop | | around the other device while connected |
+  | Sweep | 6 s loop | linear | a light circling the connected card |
+
+- **Icon: Catch,** a ball flying into a C-shaped catch: a white C, two trail lines and an indigo ball on a slate tile.
+  - **Sources:** `docs/brand/icon.svg` (the tile) and `docs/brand/glyph.svg` (one colour).
+  - **Android:** a vector adaptive icon with no PNGs. It has the gradient background, the glyph in front, and a monochrome layer for Android 13's themed icons. The splash is the icon on the theme's background.
+  - **Windows:** `windows/runner/resources/app_icon.ico`, 16 to 256 px, which is also the installer's icon. It is made by rendering `icon.svg` at 1024 px on a transparent background and saving it as an ICO with Pillow.
+  - **In the app:** `CatchMark` draws the icon in Flutter and plays the catch once on the home screen.
 
 ## The link
 

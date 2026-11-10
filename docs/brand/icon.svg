@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="1024" height="1024">
+  <!-- Gotit's icon, "Catch": a ball flying into a C-shaped catch, on a slate tile. -->
+  <defs>
+    <radialGradient id="tile" cx="0.18" cy="0.08" r="1.2">
+      <stop offset="0" stop-color="#343B63"/>
+      <stop offset="0.58" stop-color="#14161E"/>
+    </radialGradient>
+  </defs>
+  <rect width="108" height="108" rx="23.76" fill="url(#tile)"/>
+  <rect x="0.75" y="0.75" width="106.5" height="106.5" rx="23" fill="none" stroke="#FFFFFF" stroke-opacity="0.09" stroke-width="1.5"/>
+  <path d="M73.4 35.6 A24 24 0 1 0 73.4 72.4" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round"/>
+  <path d="M71 47 H83 M73 61 H83" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="55" cy="54" r="9.5" fill="#8F98FF"/>
+</svg>
