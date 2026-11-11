@@ -1,18 +1,22 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/notice_keeper.dart';
 
 class FakeNotice implements LinkNotice {
   final shown = <(String, String?)>[];
+  final sharing = <bool>[];
   int hidden = 0;
 
   @override
-  Future<bool> show(String title, {String? text}) async {
+  Future<bool> show(String title, {String? text, bool sharing = true}) async {
     shown.add((title, text));
+    this.sharing.add(sharing);
     return true;
   }
 
@@ -106,6 +110,29 @@ void main() {
 
     await watched.stop();
     await watcher.close();
+  });
+
+  test('says when sharing is off, with Turn on', () async {
+    final sharing = ValueNotifier(SharingState.initial);
+    final kept = NoticeKeeper(
+      states: states.stream,
+      current: () => current,
+      notice: notice,
+      sharing: sharing,
+    )..start();
+    await change(const PhoneLinkState(pc: _pc, connection: Connection.online));
+    expect(notice.sharing.last, isTrue);
+
+    sharing.value = SharingState(on: false, changedAt: DateTime(2026));
+    expect(notice.shown.last, ('Sharing off', 'Connected to Desk PC'));
+    expect(notice.sharing.last, isFalse);
+
+    sharing.value = SharingState(on: true, changedAt: DateTime(2027));
+    expect(notice.shown.last, ('Connected to Desk PC', null));
+    expect(notice.sharing.last, isTrue);
+
+    await kept.stop();
+    sharing.dispose();
   });
 
   test('does not repeat itself', () async {

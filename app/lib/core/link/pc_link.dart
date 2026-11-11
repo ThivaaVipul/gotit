@@ -11,6 +11,7 @@ import 'package:gotit/core/link/pairing.dart';
 import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/protocol.dart';
 import 'package:gotit/core/link/session.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 
 /// How the link to the other device stands.
 enum Connection {
@@ -106,7 +107,7 @@ class PcLinkState {
 /// One TLS port does both. A phone that is pairing shows no certificate and
 /// can only ask to pair. The paired phone shows the certificate pinned when
 /// they paired, and nothing else is let in.
-class PcLink implements ClipLink {
+class PcLink implements ClipLink, SharingLink {
   PcLink({
     required this.identity,
     required this.name,
@@ -146,6 +147,7 @@ class PcLink implements ClipLink {
 
   final _states = StreamController<PcLinkState>.broadcast();
   final _clips = StreamController<Clip>.broadcast();
+  final _sharing = StreamController<SharingState>.broadcast();
   final _invites = <String, DateTime>{};
   PcLinkState _state;
   SecureServerSocket? _server;
@@ -157,6 +159,25 @@ class PcLink implements ClipLink {
 
   @override
   Stream<Clip> get clips => _clips.stream;
+
+  @override
+  Stream<SharingState> get sharingChanges => _sharing.stream;
+
+  @override
+  bool get linked => _state.connection == Connection.online;
+
+  @override
+  Stream<bool> get linkedChanges =>
+      states.map((state) => state.connection == Connection.online).distinct();
+
+  /// Sends the sharing switch to the phone, when they are linked.
+  @override
+  bool sendSharing(SharingState sharing) {
+    final session = _session;
+    if (session == null || !linked) return false;
+    session.send(sharing.toFrame());
+    return true;
+  }
 
   /// Sends [clip] to the phone, when it is linked with the same link version.
   @override
@@ -408,6 +429,9 @@ class PcLink implements ClipLink {
           if (clip != null && _state.connection == Connection.online) {
             _clips.add(clip);
           }
+        case Frames.sharing:
+          final sharing = SharingState.fromFrame(frame);
+          if (sharing != null && linked) _sharing.add(sharing);
         case Frames.bye:
           // The phone forgot this pairing.
           await savePhone(null);

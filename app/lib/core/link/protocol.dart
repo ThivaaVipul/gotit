@@ -51,6 +51,11 @@ abstract final class Frames {
   /// at; the text is the body.
   static const clip = 'clip';
 
+  /// Both ways, on a paired link: the sharing switch. on, at (when it was
+  /// changed, ms since epoch), by (the device ID where it was changed). Sent
+  /// when it changes and each time the link comes up.
+  static const sharing = 'sharing';
+
   static const ping = 'ping';
   static const pong = 'pong';
 }

@@ -4,6 +4,7 @@ import 'package:gotit/app/theme/gotit_motion.dart';
 import 'package:gotit/app/widgets/catch_mark.dart';
 import 'package:gotit/core/update/updater.dart';
 import 'package:gotit/features/home/widgets/link_hero.dart';
+import 'package:gotit/features/home/widgets/sharing_row.dart';
 import 'package:gotit/features/settings/view/settings_page.dart';
 import 'package:gotit/features/setup/widgets/setup_checklist.dart';
 
@@ -46,8 +47,12 @@ class HomePage extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            if (pcLink != null) PcLinkHero(link: pcLink),
-            if (services.phoneLink != null) const PhoneLinkHero(),
+            if (pcLink != null)
+              PcLinkHero(link: pcLink, sharing: services.sharing),
+            if (services.phoneLink != null)
+              PhoneLinkHero(sharing: services.sharing),
+            if (services.sharing case final sharing?)
+              SharingRow(sharing: sharing, settings: services.settings),
             if (services.phoneSetup case final setup?)
               SetupChecklist(setup: setup),
             const SizedBox(height: 24),

@@ -61,6 +61,11 @@ class SetupCubit extends Cubit<SetupStatus?> {
     await refresh();
   }
 
+  Future<void> addTile() async {
+    await _setup.addTile();
+    await refresh();
+  }
+
   /// A step only you can tell is done.
   Future<void> mark(String step) async {
     await _setup.mark(step);

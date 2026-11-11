@@ -15,6 +15,8 @@ import io.flutter.embedding.engine.dart.DartExecutor
 class GotitApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // The switch as last known, before Dart has started.
+        Sharing.load(this)
         val engine = FlutterEngine(this)
         Channels.register(this, engine)
         engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())

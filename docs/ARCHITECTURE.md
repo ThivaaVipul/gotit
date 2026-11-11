@@ -146,11 +146,13 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 
 ## The switch
 
-- **State:** `{on, changedAt, by}`, stored on both devices. On connect, both send their state, and the later change wins (ties go by device ID). Flipping the switch on either side sends a `switch` frame.
+- **State:** `{on, changedAt, by}` (`lib/core/sharing/`), kept in each device's settings. Each time the link comes up, both send their state in a `sharing` frame, and the later change wins (ties go by device ID). Flipping the switch on either side sends the frame too; flipped while apart, it crosses on the next link-up. An older peer ignores the frame, so the link version didn't change.
 - **While off:**
-  - The watchers ignore copies, and screenshots and files are refused. Sending a file offers "Turn on and send".
-  - The link itself stays up, so the PC can turn sharing back on.
-  - On the phone, the foreground service's notification reads "Sharing off" and has a Turn on button.
+  - Copies are dropped both ways (the clip bridge checks the switch on both sides), and the phone's copy watcher reads nothing. Screenshots and files will be refused; sending a file offers "Turn on and send".
+  - The link itself stays up, so either side can turn sharing back on.
+  - The home screens say "Sharing off": the other device dims, and the ring and sweep don't play.
+  - On the phone, the ongoing notification reads "Sharing off" with a Turn on button (Send and Turn off while on). On the PC, the tray icon is greyed out (`assets/tray/gotit-off.ico`, made from `gotit.ico` in greyscale) and the menu's Sharing item is unticked.
+- **Outside the app on the phone:** Dart owns the switch. Kotlin keeps a copy (`Sharing`, also saved, so it is right before Dart starts) for the quick settings tile and the copy watcher. Taps on the tile and the notification's buttons go back to Dart; a tile tap that starts the app waits in Kotlin until Dart listens. The tile is unavailable until paired and works while the PC is away. Android 13's own "Add tile?" prompt is offered once in the setup checklist and again in Settings.
 
 ## Phone app (Android)
 
@@ -184,7 +186,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 - **Window and tray** (`lib/app/desktop_shell.dart`, M2b1):
   - **Packages:** `tray_manager` 0.5.3 and `window_manager` 0.5.2. Newer releases need Flutter 3.47, and `tray_manager` 0.6 was withdrawn.
   - **Window:** the runner no longer shows the window by itself. Dart shows it, unless Gotit started with Windows (`--hidden`), when it stays in the tray. Closing the window hides it.
-  - **Tray:** clicking the icon brings the window back, and the menu has Open and Quit. The sharing switch joins the menu in M2d. Windows 11 puts a new tray icon in the overflow (the ^ arrow) until you drag it out or turn it on under Settings, Taskbar, Other system tray icons.
+  - **Tray:** clicking the icon brings the window back, and the menu has Open, the Sharing switch (ticked while on) and Quit. The icon is greyed out while sharing is off. Windows 11 puts a new tray icon in the overflow (the ^ arrow) until you drag it out or turn it on under Settings, Taskbar, Other system tray icons.
   - **Two quirks, handled:**
     - `tray_manager` adds the icon with whatever tooltip text it holds, and Windows keeps that first text as the app's name in its tray-icon list. So the tooltip is set before the icon.
     - The engine's own teardown keeps the window on screen for about 9 seconds after a normal quit. So Quit hides the window, removes the tray icon and ends with `exit()`, as the self-update already does.

@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="watcher_label">Gotit</string>
+    <string name="tile_label">Gotit</string>
+    <string name="tile_on">Sharing on</string>
+    <string name="tile_off">Sharing off</string>
+    <string name="tile_not_paired">Not paired</string>
     <string name="watcher_description">Notices when you copy something on this phone, so Gotit can send it to your PC. It reads the clipboard only right after a copy, and keeps nothing.\n\nTurn on the main switch. The shortcut isn\'t needed.</string>
 </resources>

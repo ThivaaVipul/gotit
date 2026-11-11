@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gotit/app/theme/gotit_colors.dart';
@@ -13,11 +14,31 @@ import 'package:gotit/core/link/pc_link.dart';
 import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/link/protocol.dart';
 import 'package:gotit/core/platform/device.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/features/home/cubit/link_cubits.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+/// Follows the sharing switch, where there is one.
+class _SharingAware extends StatelessWidget {
+  const _SharingAware({required this.sharing, required this.builder});
+
+  final ValueListenable<SharingState>? sharing;
+  final Widget Function(bool on) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final sharing = this.sharing;
+    if (sharing == null) return builder(true);
+    return ValueListenableBuilder<SharingState>(
+      valueListenable: sharing,
+      builder: (context, state, _) => builder(state.on),
+    );
+  }
+}
+
 /// The two devices and the link between them, with the other one's name and
-/// how the link stands.
+/// how the link stands. While sharing is off the link is still up, but the
+/// card rests: "Sharing off", the other device dimmed and nothing moving.
 class _LinkCard extends StatelessWidget {
   const _LinkCard({
     required this.here,
@@ -26,6 +47,7 @@ class _LinkCard extends StatelessWidget {
     required this.status,
     required this.tone,
     required this.online,
+    this.sharingOn = true,
     super.key,
   });
 
@@ -35,20 +57,23 @@ class _LinkCard extends StatelessWidget {
   final String status;
   final StatusTone tone;
   final bool online;
+  final bool sharingOn;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final live = online && sharingOn;
+    final paused = online && !sharingOn;
     return SweepCard(
-      live: online,
+      live: live,
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       child: Column(
         children: [
           Row(
             children: [
               DeviceNode(icon: here),
-              Expanded(child: LinkWire(active: online)),
-              DeviceNode(icon: there, live: online, muted: !online),
+              Expanded(child: LinkWire(active: live)),
+              DeviceNode(icon: there, live: live, muted: !live),
             ],
           ),
           const SizedBox(height: 18),
@@ -60,7 +85,10 @@ class _LinkCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 6),
-          StatusLine(status, tone: tone),
+          StatusLine(
+            paused ? 'Sharing off' : status,
+            tone: paused ? StatusTone.off : tone,
+          ),
         ],
       ),
     );
@@ -69,10 +97,17 @@ class _LinkCard extends StatelessWidget {
 
 /// The phone's home: the paired PC and the link.
 class PhoneLinkHero extends StatelessWidget {
-  const PhoneLinkHero({super.key});
+  const PhoneLinkHero({this.sharing, super.key});
+
+  final ValueListenable<SharingState>? sharing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _SharingAware(
+    sharing: sharing,
+    builder: (sharingOn) => _build(context, sharingOn),
+  );
+
+  Widget _build(BuildContext context, bool sharingOn) {
     return BlocBuilder<PhoneLinkCubit, PhoneLinkState>(
       builder: (context, state) {
         final pc = state.pc;
@@ -94,6 +129,7 @@ class PhoneLinkHero extends StatelessWidget {
           status: status,
           tone: tone,
           online: state.connection == Connection.online,
+          sharingOn: sharingOn,
         );
       },
     );
@@ -102,12 +138,18 @@ class PhoneLinkHero extends StatelessWidget {
 
 /// The PC's home: waiting for a phone, or the paired phone and the link.
 class PcLinkHero extends StatelessWidget {
-  const PcLinkHero({required this.link, super.key});
+  const PcLinkHero({required this.link, this.sharing, super.key});
 
   final PcLink link;
+  final ValueListenable<SharingState>? sharing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _SharingAware(
+    sharing: sharing,
+    builder: (sharingOn) => _build(context, sharingOn),
+  );
+
+  Widget _build(BuildContext context, bool sharingOn) {
     return BlocBuilder<PcLinkCubit, PcLinkState>(
       builder: (context, state) {
         final phone = state.phone;
@@ -136,6 +178,7 @@ class PcLinkHero extends StatelessWidget {
                     _ => StatusTone.off,
                   },
                   online: state.connection == Connection.online,
+                  sharingOn: sharingOn,
                 ),
         );
       },

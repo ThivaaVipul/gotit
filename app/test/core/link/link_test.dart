@@ -8,6 +8,7 @@ import 'package:gotit/core/link/pc_link.dart';
 import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/link/protocol.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 
 /// The two ends of the link, talking real TLS over localhost.
 class Pair {
@@ -315,6 +316,33 @@ void main() {
           ph.state.connection == Connection.online &&
           link.pc.state.connection == Connection.online,
     );
+  });
+
+  test('the sharing switch crosses both ways once linked', () async {
+    await startPc(phone: link.phoneAsPeer);
+    final ph = phone(pc: link.pcAsPeer);
+    final off = SharingState(
+      on: false,
+      changedAt: DateTime(2026, 11, 11, 9),
+      by: 'phone',
+    );
+    expect(ph.sendSharing(off), isFalse);
+
+    final atPhone = <SharingState>[];
+    final atPc = <SharingState>[];
+    final phoneLinked = <bool>[];
+    ph.sharingChanges.listen(atPhone.add);
+    link.pc.sharingChanges.listen(atPc.add);
+    ph.linkedChanges.listen(phoneLinked.add);
+    ph.start();
+    await until(() => ph.linked && link.pc.linked);
+    expect(phoneLinked, contains(true));
+
+    expect(ph.sendSharing(off), isTrue);
+    expect(link.pc.sendSharing(SharingState.initial), isTrue);
+    await until(() => atPhone.isNotEmpty && atPc.isNotEmpty);
+    expect(atPc.single, off);
+    expect(atPhone.single, SharingState.initial);
   });
 
   test('copies cross both ways once linked, and not before', () async {

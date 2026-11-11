@@ -22,19 +22,27 @@ abstract interface class DeviceClipboard {
 
 /// Carries copies between this device's clipboard and the link: copies made
 /// here cross to the other device, and what arrives goes on the clipboard.
-/// Nothing is queued: a copy made while the other device is away is dropped.
+/// Nothing is queued: a copy made while the other device is away, or while
+/// sharing is off, is dropped.
 class ClipBridge {
   ClipBridge({
     required this.link,
     required this.clipboard,
     ClipGuard? guard,
+    bool Function()? sharing,
     this.onSent,
     this.onArrived,
-  }) : guard = guard ?? ClipGuard();
+  }) : guard = guard ?? ClipGuard(),
+       sharing = sharing ?? _always;
 
   final ClipLink link;
   final DeviceClipboard clipboard;
   final ClipGuard guard;
+
+  /// Whether the sharing switch is on: nothing crosses either way while off.
+  final bool Function() sharing;
+
+  static bool _always() => true;
 
   /// A copy made here reached the other device.
   final void Function(Clip clip)? onSent;
@@ -58,13 +66,14 @@ class ClipBridge {
   }
 
   void _copied(Clip clip) {
-    if (clip.text.isEmpty || clip.tooBig) return;
+    if (!sharing() || clip.text.isEmpty || clip.tooBig) return;
     // Send on purpose always sends; a watched copy goes through the guard.
     if (!clip.manual && !guard.shouldSend(clip.text)) return;
     if (link.sendClip(clip)) onSent?.call(clip);
   }
 
   Future<void> _arrived(Clip clip) async {
+    if (!sharing()) return;
     guard.wrote(clip.text);
     await clipboard.write(clip);
     onArrived?.call(clip);

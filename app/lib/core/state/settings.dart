@@ -3,11 +3,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:gotit/core/link/peer.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 
 /// What the user chose. Empty fields mean "never set": the defaults apply.
 @immutable
 class Settings {
-  const Settings({this.pcName, this.startWithWindows, this.peer});
+  const Settings({this.pcName, this.startWithWindows, this.peer, this.sharing});
 
   /// The PC's name as the phone shows it. Empty means the Windows name.
   final String? pcName;
@@ -19,22 +20,28 @@ class Settings {
   /// The paired device: the phone on the PC, the PC on the phone.
   final Peer? peer;
 
+  /// The sharing switch as last known. Empty means on, never changed.
+  final SharingState? sharing;
+
   Settings copyWith({
     ValueGetter<String?>? pcName,
     ValueGetter<bool?>? startWithWindows,
     ValueGetter<Peer?>? peer,
+    ValueGetter<SharingState?>? sharing,
   }) => Settings(
     pcName: pcName != null ? pcName() : this.pcName,
     startWithWindows: startWithWindows != null
         ? startWithWindows()
         : this.startWithWindows,
     peer: peer != null ? peer() : this.peer,
+    sharing: sharing != null ? sharing() : this.sharing,
   );
 
   Map<String, Object?> toJson() => {
     if (pcName != null) 'pcName': pcName,
     if (startWithWindows != null) 'startWithWindows': startWithWindows,
     if (peer != null) 'peer': peer!.toJson(),
+    if (sharing != null) 'sharing': sharing!.toJson(),
   };
 
   factory Settings.fromJson(Map<String, Object?> json) => Settings(
@@ -43,6 +50,7 @@ class Settings {
         ? json['startWithWindows'] as bool
         : null,
     peer: _peerFrom(json['peer']),
+    sharing: SharingState.fromJson(json['sharing']),
   );
 
   static Peer? _peerFrom(Object? json) {
@@ -59,10 +67,11 @@ class Settings {
       other is Settings &&
       other.pcName == pcName &&
       other.startWithWindows == startWithWindows &&
-      other.peer == peer;
+      other.peer == peer &&
+      other.sharing == sharing;
 
   @override
-  int get hashCode => Object.hash(pcName, startWithWindows, peer);
+  int get hashCode => Object.hash(pcName, startWithWindows, peer, sharing);
 }
 
 /// Keeps [Settings] in a small JSON file and tells listeners when they change.

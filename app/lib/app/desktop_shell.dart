@@ -6,16 +6,25 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Gotit on Windows lives in the tray: closing the window hides it, the tray
-/// icon brings it back, and Quit is in the tray menu.
+/// icon brings it back, and the sharing switch and Quit are in the tray menu.
+/// The icon is greyed out while sharing is off.
 class DesktopShell with TrayListener, WindowListener {
   DesktopShell._();
 
   static const _open = 'open';
+  static const _sharing = 'sharing';
   static const _quit = 'quit';
   static const _icon = 'assets/tray/gotit.ico';
+  static const _offIcon = 'assets/tray/gotit-off.ico';
   static const _sentIcon = 'assets/tray/gotit-sent.ico';
 
   Timer? _sentTimer;
+  bool _sharingOn = true;
+
+  /// The tray menu's Sharing item was clicked: turn sharing on or off.
+  void Function({required bool on})? onSharing;
+
+  String get _restingIcon => _sharingOn ? _icon : _offIcon;
 
   /// Sets up the window and the tray. With [hidden] (a start with Windows)
   /// the window stays in the tray until it is opened.
@@ -45,16 +54,30 @@ class DesktopShell with TrayListener, WindowListener {
     await trayManager.setToolTip('Gotit');
     await trayManager.setIcon(_icon);
     await trayManager.setToolTip('Gotit');
-    await trayManager.setContextMenu(
-      Menu(
-        items: [
-          MenuItem(key: _open, label: 'Open Gotit'),
-          MenuItem.separator(),
-          MenuItem(key: _quit, label: 'Quit Gotit'),
-        ],
-      ),
-    );
+    await shell._setMenu();
     return shell;
+  }
+
+  Future<void> _setMenu() => trayManager.setContextMenu(
+    Menu(
+      items: [
+        MenuItem(key: _open, label: 'Open Gotit'),
+        MenuItem.checkbox(key: _sharing, label: 'Sharing', checked: _sharingOn),
+        MenuItem.separator(),
+        MenuItem(key: _quit, label: 'Quit Gotit'),
+      ],
+    ),
+  );
+
+  /// Shows the sharing switch in the tray: a greyed icon and an unticked
+  /// Sharing item while it is off.
+  Future<void> showSharing({required bool on}) async {
+    if (on == _sharingOn) return;
+    _sharingOn = on;
+    _sentTimer?.cancel();
+    await trayManager.setIcon(_restingIcon);
+    await trayManager.setToolTip(on ? 'Gotit' : 'Gotit: sharing off');
+    await _setMenu();
   }
 
   /// Shows the window and brings it to the front.
@@ -67,10 +90,11 @@ class DesktopShell with TrayListener, WindowListener {
   /// The quiet sign that a copy reached the phone: a check in the tray for
   /// about a second.
   void flashSent() {
+    if (!_sharingOn) return;
     _sentTimer?.cancel();
     unawaited(trayManager.setIcon(_sentIcon));
     _sentTimer = Timer(const Duration(milliseconds: 1100), () {
-      unawaited(trayManager.setIcon(_icon));
+      unawaited(trayManager.setIcon(_restingIcon));
     });
   }
 
@@ -107,6 +131,8 @@ class DesktopShell with TrayListener, WindowListener {
     switch (menuItem.key) {
       case _open:
         unawaited(showWindow());
+      case _sharing:
+        onSharing?.call(on: !_sharingOn);
       case _quit:
         unawaited(quit());
     }

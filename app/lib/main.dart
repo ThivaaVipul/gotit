@@ -18,7 +18,9 @@ import 'package:gotit/core/platform/clipboard.dart';
 import 'package:gotit/core/platform/device.dart';
 import 'package:gotit/core/platform/mdns.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
+import 'package:gotit/core/platform/sharing_controls.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/notice_keeper.dart';
 import 'package:gotit/core/state/settings.dart';
 import 'package:gotit/core/update/installer.dart';
@@ -82,6 +84,15 @@ Future<void> main(List<String> args) async {
   PhoneLink? phoneLink;
   PcFinder? finder;
   PhoneSetup? phoneSetup;
+  SharingSwitch? sharing;
+  // The switch both devices share, kept across restarts.
+  SharingSwitch sharingOver(SharingLink link) => SharingSwitch(
+    initial: settings.value.sharing ?? SharingState.initial,
+    deviceId: identity.id,
+    link: link,
+    save: (state) =>
+        settings.save(settings.value.copyWith(sharing: () => state)),
+  )..start();
   if (Platform.isWindows) {
     pcLink = PcLink(
       identity: identity,
@@ -91,11 +102,23 @@ Future<void> main(List<String> args) async {
       // A phone asking to pair brings the window forward for Accept.
       onRequest: (_) => shell?.showWindow(),
     );
+    final pcSharing = sharingOver(pcLink);
+    sharing = pcSharing;
+    // The tray's Sharing item, and its greyed icon while off.
+    final tray = shell;
+    if (tray != null) {
+      tray.onSharing = pcSharing.set;
+      void showSharing() => unawaited(tray.showSharing(on: pcSharing.on));
+      pcSharing.addListener(showSharing);
+      showSharing();
+    }
     await _advertise(pcLink, identity, settings, windowsName);
-    // Copies cross both ways; one that reaches the phone flashes the tray.
+    // Copies cross both ways while sharing is on; one that reaches the phone
+    // flashes the tray.
     ClipBridge(
       link: pcLink,
       clipboard: ChannelClipboard(),
+      sharing: () => pcSharing.on,
       onSent: (_) => shell?.flashSent(),
     ).start();
   } else {
@@ -108,6 +131,10 @@ Future<void> main(List<String> args) async {
       savePc: savePeer,
       locate: (pcId) async => endpointsOf(pcFinder, pcId),
     );
+    final phoneSharing = sharingOver(phoneLink);
+    sharing = phoneSharing;
+    // The tile, the notification's buttons and the copy watcher follow it.
+    PhoneSharingControls(sharing: phoneSharing, link: phoneLink).start();
     unawaited(_startLooking(pcFinder, phoneLink));
     // The ongoing notification keeps the link running while paired, and
     // says "Sent to <PC>" after a copy crossed.
@@ -119,10 +146,12 @@ Future<void> main(List<String> args) async {
       current: () => link.state,
       notice: const ChannelLinkNotice(),
       watcher: setup.watcherChanges,
+      sharing: phoneSharing,
     )..start();
     ClipBridge(
       link: phoneLink,
       clipboard: ChannelClipboard(),
+      sharing: () => phoneSharing.on,
       onSent: (_) => notice.sent(),
     ).start();
   }
@@ -140,6 +169,7 @@ Future<void> main(List<String> args) async {
         phoneLink: phoneLink,
         finder: finder,
         phoneSetup: phoneSetup,
+        sharing: sharing,
       ),
     ),
   );

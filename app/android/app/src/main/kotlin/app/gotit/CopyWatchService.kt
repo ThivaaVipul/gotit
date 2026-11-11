@@ -32,8 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   the screen of apps that may copy without telling ([WatchedApps]), whose
  *   screen is also checked a few times a second while it is on.
  *
- * It reads only while paired (the link service runs then) and hands what it
- * reads to [CopyReads].
+ * It reads only while paired (the link service runs then) and sharing is
+ * on, and hands what it reads to [CopyReads].
  */
 class CopyWatchService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
@@ -74,7 +74,7 @@ class CopyWatchService : AccessibilityService() {
     /** Some menus open without any event (Google Messages): look a few times a second. */
     private val poll = object : Runnable {
         override fun run() {
-            if (LinkService.running && !scanQueued.get() &&
+            if (watching() && !scanQueued.get() &&
                 getSystemService(PowerManager::class.java).isInteractive &&
                 (copyNode != null || frontNeedsCheck())
             ) {
@@ -85,7 +85,7 @@ class CopyWatchService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (!LinkService.running) return
+        if (!watching()) return
         val type = event.eventType
         if (type == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             onWindowsChanged(event)
@@ -231,7 +231,7 @@ class CopyWatchService : AccessibilityService() {
 
     /** Main thread. Tapped or dismissed: a read tells which. */
     private fun copyItemGone(app: String, kind: String) {
-        if (!cooling() && LinkService.running) trigger(kind, app)
+        if (!cooling() && watching()) trigger(kind, app)
     }
 
     /**
@@ -257,6 +257,9 @@ class CopyWatchService : AccessibilityService() {
     }
 
     // --- Reading ---
+
+    /** Only while paired (the link service runs then) and sharing is on. */
+    private fun watching() = LinkService.running && Sharing.on
 
     private fun cooling(): Boolean = SystemClock.uptimeMillis() - lastReadUptime < COOLDOWN_MS
 
