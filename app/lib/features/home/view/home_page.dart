@@ -5,6 +5,7 @@ import 'package:gotit/app/widgets/catch_mark.dart';
 import 'package:gotit/core/update/updater.dart';
 import 'package:gotit/features/home/widgets/link_hero.dart';
 import 'package:gotit/features/settings/view/settings_page.dart';
+import 'package:gotit/features/setup/widgets/setup_checklist.dart';
 
 /// Home, on both devices: the link to the other one, updates, the version.
 class HomePage extends StatelessWidget {
@@ -47,6 +48,8 @@ class HomePage extends StatelessWidget {
           children: [
             if (pcLink != null) PcLinkHero(link: pcLink),
             if (services.phoneLink != null) const PhoneLinkHero(),
+            if (services.phoneSetup case final setup?)
+              SetupChecklist(setup: setup),
             const SizedBox(height: 24),
             Center(
               child: ValueListenableBuilder<UpdateState>(

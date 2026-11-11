@@ -272,7 +272,33 @@ Each milestone gets a short grilling of its details before code.
         Two fixes came out of it:
         - the phone's name: MIUI keeps the model code in the standard setting and the real name in the Bluetooth name;
         - a connection reset that went unhandled on the phone.
-  - [ ] **M2c Text:** copied text both ways; the phone's copy watcher and its notification; the setup checklist.
+  - [ ] **M2c Text:** copied text both ways; the phone's copy watcher and its notification; the setup checklist. Plan (2026-11-11), in two pull requests, each a release:
+    - **M2c1, the background link and text from the PC:**
+      - **One engine for the app's life:** the phone's Flutter engine starts with the app's process and outlives its window, so the link keeps running in the background. A foreground service of type "connected device" holds the ongoing notification.
+      - **The notification:** it shows the link's state and has a Send button that reads the clipboard through an invisible screen (proven in M0). It changes to "Sent to <PC>" with no sound.
+      - **PC to phone:**
+        - A few lines of C++ in the Windows runner listen for clipboard changes and write the phone's text.
+        - Gotit's own writes carry a private mark, so they never bounce back. A short memory of recent texts guards the other direction too.
+        - Copies that password managers mark "keep away from clipboard watchers" still cross, as sensitive: your decision that passwords cross wins.
+        - Sensitive text stays out of Windows clipboard history and is flagged sensitive on Android.
+      - **Tray:** a check for about a second when a PC copy reaches the phone.
+      - **Checklist (first part):** notifications, and the battery exemption. The exemption also lets the service start again in the background after MIUI kills the app (an official exemption from Android's background-start limit).
+      - **Checked on the phone and this PC on 2026-11-11** with test builds (the phone build signed with the release key, as 0.4.2, so the next release updates over it). All of these worked:
+        - a PC copy pasted on the phone, with the app open and after it was swiped away from recents (the service and the link stayed up);
+        - a phone copy sent with Send and pasted on the PC, with "Sent to" in the notification for a minute;
+        - the checklist ticking both steps and then going away.
+
+        Two fixes came out of it:
+        - the notification never appeared after notifications were allowed: Android drops a notification posted before that, so the app posts it again whenever its window comes back;
+        - MIUI opens its own battery saver page for the exemption and saves "No restrictions" a moment after closing it, so the checklist reads its steps again 1 and 3 seconds after the app comes back.
+
+        99 tests pass and analysis is clean.
+    - **M2c2, automatic copies from the phone:**
+      - the M0 copy watcher, ported from the test app's source;
+      - polling only in apps that don't report taps, learned per app;
+      - the checklist's copy-watcher item, with the "Allow restricted settings" tip for apps installed outside a store;
+      - Autostart and lock in recents (Xiaomi only, marked done by you);
+      - a warning when MIUI has stopped the watcher.
   - [ ] **M2d Switch:** the shared switch in the app, the tile, the notification and the tray.
 - [ ] **M3 Images:** copied images both ways, and new phone screenshots to the PC.
 - [ ] **M4 Files:**
@@ -338,3 +364,6 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-10: Look pass. Round 1 offered Ink, Pulse and Native; you leaned to Pulse but asked for more professional designs with real motion and new icons. Round 2 offered Slate, Aurora and Signal, each animated, plus twelve icon ideas. Picked: Slate with the Catch icon.
 - 2026-11-10: M2a merged (PR #4) and released as v0.2.0. Both apps updated themselves and came back in Slate with the Catch icon.
 - 2026-11-10: M2b planned in two parts, after checking package versions and testing TLS with self-signed certificates. M2b1, the PC shell, was built and checked on this PC.
+- 2026-11-10: M2b1 merged (PR #5, v0.3.0). M2b2 built, tested on both devices, and merged (PR #6, v0.4.0): the phone and the PC pair by code or QR.
+- 2026-11-11: M2c planned in two parts (M2c1 background link and text from the PC, M2c2 the automatic copy watcher). Copies that Windows password managers mark as private still cross, as sensitive.
+- 2026-11-11: M2c1 built and checked on both devices. Text crosses from the PC by itself and from the phone with Send, also with the app swiped away.

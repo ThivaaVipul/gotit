@@ -190,7 +190,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 - **Clipboard:** a small C++ plugin in the runner.
   - It listens with `AddClipboardFormatListener` (`WM_CLIPBOARDUPDATE`).
   - It reads text (`CF_UNICODETEXT`), images (the `PNG` format, or `CF_DIBV5` converted to PNG with WIC) and file lists (`CF_HDROP`), and writes text and images back.
-  - A copy carrying `ExcludeClipboardContentFromMonitorProcessing` is skipped. A copy with `CanIncludeInClipboardHistory` set to 0 counts as sensitive.
+  - A copy carrying `ExcludeClipboardContentFromMonitorProcessing`, or with `CanIncludeInClipboardHistory` set to 0, counts as sensitive and still crosses (the PLAN decision that passwords cross wins over the mark).
   - No Rust and no extra packages.
 - **Sending files:**
   - Drag onto the window: `desktop_drop` 0.9.2.

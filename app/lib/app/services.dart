@@ -1,6 +1,7 @@
 import 'package:gotit/core/link/discovery.dart';
 import 'package:gotit/core/link/pc_link.dart';
 import 'package:gotit/core/link/phone_link.dart';
+import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
 import 'package:gotit/core/state/settings.dart';
 import 'package:gotit/core/update/updater.dart';
@@ -17,6 +18,7 @@ class AppServices {
     this.pcLink,
     this.phoneLink,
     this.finder,
+    this.phoneSetup,
   });
 
   final String version;
@@ -41,6 +43,9 @@ class AppServices {
 
   /// Finds PCs on the network (the phone only).
   final PcFinder? finder;
+
+  /// The setup checklist's side on the phone (the phone only).
+  final PhoneSetup? phoneSetup;
 
   /// The PC's name as the phone shows it.
   String get pcName => effectivePcName(settings.value, windowsName);

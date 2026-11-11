@@ -8,14 +8,18 @@ import 'package:gotit/app/app.dart';
 import 'package:gotit/app/desktop_shell.dart';
 import 'package:gotit/app/services.dart';
 import 'package:gotit/core/app_version.dart';
+import 'package:gotit/core/clip/bridge.dart';
 import 'package:gotit/core/link/discovery.dart';
 import 'package:gotit/core/link/identity.dart';
 import 'package:gotit/core/link/pc_link.dart';
 import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/phone_link.dart';
+import 'package:gotit/core/platform/clipboard.dart';
 import 'package:gotit/core/platform/device.dart';
 import 'package:gotit/core/platform/mdns.dart';
+import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
+import 'package:gotit/core/state/notice_keeper.dart';
 import 'package:gotit/core/state/settings.dart';
 import 'package:gotit/core/update/installer.dart';
 import 'package:gotit/core/update/release_info.dart';
@@ -87,6 +91,12 @@ Future<void> main(List<String> args) async {
       onRequest: (_) => shell?.showWindow(),
     );
     await _advertise(pcLink, identity, settings, windowsName);
+    // Copies cross both ways; one that reaches the phone flashes the tray.
+    ClipBridge(
+      link: pcLink,
+      clipboard: ChannelClipboard(),
+      onSent: (_) => shell?.flashSent(),
+    ).start();
   } else {
     final pcFinder = BonsoirPcFinder();
     finder = pcFinder;
@@ -98,6 +108,19 @@ Future<void> main(List<String> args) async {
       locate: (pcId) async => endpointsOf(pcFinder, pcId),
     );
     unawaited(_startLooking(pcFinder, phoneLink));
+    // The ongoing notification keeps the link running while paired, and
+    // says "Sent to <PC>" after a copy crossed.
+    final link = phoneLink;
+    final notice = NoticeKeeper(
+      states: link.states,
+      current: () => link.state,
+      notice: const ChannelLinkNotice(),
+    )..start();
+    ClipBridge(
+      link: phoneLink,
+      clipboard: ChannelClipboard(),
+      onSent: (_) => notice.sent(),
+    ).start();
   }
 
   runApp(
@@ -112,6 +135,7 @@ Future<void> main(List<String> args) async {
         pcLink: pcLink,
         phoneLink: phoneLink,
         finder: finder,
+        phoneSetup: Platform.isAndroid ? const ChannelPhoneSetup() : null,
       ),
     ),
   );

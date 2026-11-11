@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gotit/core/clip/clip.dart';
 import 'package:gotit/core/link/identity.dart';
 import 'package:gotit/core/link/pairing.dart';
 import 'package:gotit/core/link/pc_link.dart';
@@ -314,5 +315,34 @@ void main() {
           ph.state.connection == Connection.online &&
           link.pc.state.connection == Connection.online,
     );
+  });
+
+  test('copies cross both ways once linked, and not before', () async {
+    await startPc(phone: link.phoneAsPeer);
+    final ph = phone(pc: link.pcAsPeer);
+    expect(ph.sendClip(Clip(text: 'too early')), isFalse);
+    expect(link.pc.sendClip(Clip(text: 'too early')), isFalse);
+
+    final atPhone = <Clip>[];
+    final atPc = <Clip>[];
+    ph.clips.listen(atPhone.add);
+    link.pc.clips.listen(atPc.add);
+    ph.start();
+    await until(
+      () =>
+          ph.state.connection == Connection.online &&
+          link.pc.state.connection == Connection.online,
+    );
+
+    expect(
+      link.pc.sendClip(Clip(text: 'from the PC', sensitive: true)),
+      isTrue,
+    );
+    expect(ph.sendClip(Clip(text: 'from the phone')), isTrue);
+    await until(() => atPhone.isNotEmpty && atPc.isNotEmpty);
+    expect(atPhone.single.text, 'from the PC');
+    expect(atPhone.single.sensitive, isTrue);
+    expect(atPc.single.text, 'from the phone');
+    expect(atPc.single.sensitive, isFalse);
   });
 }

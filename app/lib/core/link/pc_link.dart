@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:gotit/core/clip/bridge.dart';
+import 'package:gotit/core/clip/clip.dart';
 import 'package:gotit/core/link/frame.dart';
 import 'package:gotit/core/link/identity.dart';
 import 'package:gotit/core/link/pairing.dart';
@@ -104,7 +106,7 @@ class PcLinkState {
 /// One TLS port does both. A phone that is pairing shows no certificate and
 /// can only ask to pair. The paired phone shows the certificate pinned when
 /// they paired, and nothing else is let in.
-class PcLink {
+class PcLink implements ClipLink {
   PcLink({
     required this.identity,
     required this.name,
@@ -143,6 +145,7 @@ class PcLink {
   final Duration silenceLimit;
 
   final _states = StreamController<PcLinkState>.broadcast();
+  final _clips = StreamController<Clip>.broadcast();
   final _invites = <String, DateTime>{};
   PcLinkState _state;
   SecureServerSocket? _server;
@@ -151,6 +154,20 @@ class PcLink {
 
   PcLinkState get state => _state;
   Stream<PcLinkState> get states => _states.stream;
+
+  @override
+  Stream<Clip> get clips => _clips.stream;
+
+  /// Sends [clip] to the phone, when it is linked with the same link version.
+  @override
+  bool sendClip(Clip clip) {
+    final session = _session;
+    if (session == null || _state.connection != Connection.online) {
+      return false;
+    }
+    session.send(clip.toFrame());
+    return true;
+  }
 
   /// The port the PC listens on, once started.
   int get port => _server?.port ?? 0;
@@ -193,6 +210,7 @@ class PcLink {
     _server = null;
     _state.request?.decline();
     await _states.close();
+    await _clips.close();
   }
 
   /// A QR invite: the PC's addresses, its certificate fingerprint and a
@@ -384,6 +402,12 @@ class PcLink {
       switch (frame.type) {
         case Frames.hello:
           await _greeted(frame);
+        case Frames.clip:
+          // Only between matching versions.
+          final clip = Clip.fromFrame(frame);
+          if (clip != null && _state.connection == Connection.online) {
+            _clips.add(clip);
+          }
         case Frames.bye:
           // The phone forgot this pairing.
           await savePhone(null);
