@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:gotit/core/clip/bridge.dart';
+import 'package:gotit/core/clip/clip.dart';
 
 import 'package:gotit/core/link/frame.dart';
 import 'package:gotit/core/link/identity.dart';
@@ -111,7 +113,7 @@ class PhoneLinkState {
 
 /// The phone's side of the link: it pairs with a PC, then keeps a session
 /// with it open while it is running.
-class PhoneLink {
+class PhoneLink implements ClipLink {
   PhoneLink({
     required this.identity,
     required this.name,
@@ -156,6 +158,7 @@ class PhoneLink {
   final List<Duration> backoff;
 
   final _states = StreamController<PhoneLinkState>.broadcast();
+  final _clips = StreamController<Clip>.broadcast();
   PhoneLinkState _state;
   LinkSession? _session;
   bool _running = false;
@@ -163,6 +166,20 @@ class PhoneLink {
 
   PhoneLinkState get state => _state;
   Stream<PhoneLinkState> get states => _states.stream;
+
+  @override
+  Stream<Clip> get clips => _clips.stream;
+
+  /// Sends [clip] to the PC, when it is linked with the same link version.
+  @override
+  bool sendClip(Clip clip) {
+    final session = _session;
+    if (session == null || _state.connection != Connection.online) {
+      return false;
+    }
+    session.send(clip.toFrame());
+    return true;
+  }
 
   // Pairing --------------------------------------------------------------
 
@@ -318,6 +335,7 @@ class PhoneLink {
   Future<void> close() async {
     await stop();
     await _states.close();
+    await _clips.close();
   }
 
   Future<void> _run() async {
@@ -413,6 +431,12 @@ class PhoneLink {
       switch (frame.type) {
         case Frames.hello:
           await _greeted(frame);
+        case Frames.clip:
+          // Only between matching versions.
+          final clip = Clip.fromFrame(frame);
+          if (clip != null && _state.connection == Connection.online) {
+            _clips.add(clip);
+          }
         case Frames.bye:
           // The PC forgot this pairing.
           _running = false;

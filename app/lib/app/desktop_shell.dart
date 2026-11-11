@@ -12,6 +12,10 @@ class DesktopShell with TrayListener, WindowListener {
 
   static const _open = 'open';
   static const _quit = 'quit';
+  static const _icon = 'assets/tray/gotit.ico';
+  static const _sentIcon = 'assets/tray/gotit-sent.ico';
+
+  Timer? _sentTimer;
 
   /// Sets up the window and the tray. With [hidden] (a start with Windows)
   /// the window stays in the tray until it is opened.
@@ -39,7 +43,7 @@ class DesktopShell with TrayListener, WindowListener {
     // holds, and Windows keeps that first text as the app's name in its list
     // of tray icons. Set it again once the icon exists.
     await trayManager.setToolTip('Gotit');
-    await trayManager.setIcon('assets/tray/gotit.ico');
+    await trayManager.setIcon(_icon);
     await trayManager.setToolTip('Gotit');
     await trayManager.setContextMenu(
       Menu(
@@ -58,6 +62,16 @@ class DesktopShell with TrayListener, WindowListener {
     if (await windowManager.isMinimized()) await windowManager.restore();
     await windowManager.show();
     await windowManager.focus();
+  }
+
+  /// The quiet sign that a copy reached the phone: a check in the tray for
+  /// about a second.
+  void flashSent() {
+    _sentTimer?.cancel();
+    unawaited(trayManager.setIcon(_sentIcon));
+    _sentTimer = Timer(const Duration(milliseconds: 1100), () {
+      unawaited(trayManager.setIcon(_icon));
+    });
   }
 
   /// Whether the window is hidden, leaving only the tray icon.

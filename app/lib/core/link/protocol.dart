@@ -47,6 +47,10 @@ abstract final class Frames {
   /// Both ways, on a paired link: the other side forgot this pairing.
   static const bye = 'bye';
 
+  /// Both ways, on a paired link: something copied. kind (text), sensitive,
+  /// at; the text is the body.
+  static const clip = 'clip';
+
   static const ping = 'ping';
   static const pong = 'pong';
 }

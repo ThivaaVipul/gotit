@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="1024" height="1024">
+  <!-- The tray icon for a moment after a copy reached the phone: the slate
+       tile with a check where the catch usually is. -->
+  <defs>
+    <radialGradient id="tile" cx="0.18" cy="0.08" r="1.2">
+      <stop offset="0" stop-color="#343B63"/>
+      <stop offset="0.58" stop-color="#14161E"/>
+    </radialGradient>
+  </defs>
+  <rect width="108" height="108" rx="23.76" fill="url(#tile)"/>
+  <rect x="0.75" y="0.75" width="106.5" height="106.5" rx="23" fill="none" stroke="#FFFFFF" stroke-opacity="0.09" stroke-width="1.5"/>
+  <path d="M30 56 L46 72 L79 37" fill="none" stroke="#8F98FF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -2,12 +2,19 @@
     <!-- Updates: the release check on GitHub, and handing a downloaded APK to Android's installer. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The link runs in a foreground service ("connected device": the PC)
+         with an ongoing notification, and asks to be left out of battery
+         optimisation so it can start again in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- No cloud backup: the device key lives in the Keystore and can't be
          restored elsewhere, so a restored pairing would only half work. -->
     <application
         android:label="Gotit"
-        android:name="${applicationName}"
+        android:name=".GotitApplication"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false">
         <activity
@@ -32,6 +39,20 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Invisible: takes focus for a moment so Android lets it read the
+             clipboard (the notification's Send), then closes. -->
+        <activity
+            android:name=".ReadClipActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity="app.gotit.read"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- Keeps the link to the PC running, with its ongoing notification. -->
+        <service
+            android:name=".LinkService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
         <!-- Serves a downloaded update to Android's installer, read-only, one APK name only. -->
         <provider
             android:name=".ApkProvider"

@@ -37,6 +37,7 @@ flutter:
   assets:
     - assets/fonts/OFL.txt
     - assets/tray/gotit.ico
+    - assets/tray/gotit-sent.ico
   # Inter 4.1, static weights subset to Latin (see docs/ARCHITECTURE.md, "Look").
   fonts:
     - family: Inter

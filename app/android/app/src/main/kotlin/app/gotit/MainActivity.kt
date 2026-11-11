@@ -1,90 +1,74 @@
 package app.gotit
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
 
+/**
+ * The app's window. It shows the engine GotitApplication keeps for the
+ * process, and leaves it running when it closes.
+ */
 class MainActivity : FlutterActivity() {
+    private var windowChannel: MethodChannel? = null
+
+    override fun provideFlutterEngine(context: Context): FlutterEngine? =
+        FlutterEngineCache.getInstance().get(GotitApplication.ENGINE)
+
+    override fun shouldDestroyEngineWithHost(): Boolean = false
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        // Updates: Dart downloads and checks the APK; Android's own installer installs it.
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.gotit/updates")
-            .setMethodCallHandler { call, result ->
+        // Things only a visible window can do.
+        windowChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.gotit/activity").apply {
+            setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "canInstall" -> result.success(packageManager.canRequestPackageInstalls())
-                    "openInstallSettings" -> {
-                        startActivity(
-                            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
-                        )
+                    "notifications" -> {
+                        askForNotifications()
                         result.success(null)
                     }
-                    "install" -> {
-                        val path = call.argument<String>("path")
-                        if (path == null) {
-                            result.error("args", "No APK path", null)
-                        } else {
-                            val intent = Intent(Intent.ACTION_VIEW)
-                                .setDataAndType(ApkProvider.uriFor(File(path)), ApkProvider.MIME)
-                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                            startActivity(intent)
-                            result.success(null)
-                        }
-                    }
                     else -> result.notImplemented()
                 }
             }
-        // The phone's name as set in Settings > About phone, which the PC shows,
-        // and sealing for the device key (see Sealer).
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.gotit/device")
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "name" -> result.success(deviceName())
-                    "seal", "open" -> {
-                        val bytes = call.arguments as? ByteArray
-                        if (bytes == null) {
-                            result.error("args", "No bytes", null)
-                        } else {
-                            try {
-                                result.success(if (call.method == "seal") Sealer.seal(bytes) else Sealer.open(bytes))
-                            } catch (e: Exception) {
-                                result.error("sealer", e.javaClass.simpleName, null)
-                            }
-                        }
-                    }
-                    else -> result.notImplemented()
-                }
-            }
-    }
-
-    /**
-     * A name the user set wins. Some makers leave the standard setting at the
-     * model code and keep the friendly name elsewhere (MIUI: the Bluetooth
-     * name), so try that, then the marketing name, then the model code.
-     */
-    private fun deviceName(): String {
-        val set = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)?.trim()
-        if (!set.isNullOrEmpty() && set != Build.MODEL) return set
-        val bluetooth = try {
-            Settings.Secure.getString(contentResolver, "bluetooth_name")?.trim()
-        } catch (e: SecurityException) {
-            null
         }
-        if (!bluetooth.isNullOrEmpty()) return bluetooth
-        val market = systemProperty("ro.product.marketname")?.trim()
-        if (!market.isNullOrEmpty()) return market
-        return set?.takeIf { it.isNotEmpty() } ?: Build.MODEL
     }
 
-    private fun systemProperty(key: String): String? = try {
-        Class.forName("android.os.SystemProperties")
-            .getMethod("get", String::class.java)
-            .invoke(null, key) as? String
-    } catch (e: Exception) {
-        null
+    override fun onResume() {
+        super.onResume()
+        // A notification posted while notifications were off never shows,
+        // so post it again on the way back from the prompt or settings.
+        LinkService.repost()
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        windowChannel?.setMethodCallHandler(null)
+        windowChannel = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    /** Android's prompt the first time; its settings page once that was answered no. */
+    private fun askForNotifications() {
+        val prefs = getSharedPreferences("setup", MODE_PRIVATE)
+        val granted = Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (Build.VERSION.SDK_INT >= 33 && !granted && !prefs.getBoolean(ASKED, false)) {
+            prefs.edit().putBoolean(ASKED, true).apply()
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        } else {
+            startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
+            )
+        }
+    }
+
+    private companion object {
+        const val ASKED = "notificationsAsked"
     }
 }
