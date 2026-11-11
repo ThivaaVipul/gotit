@@ -81,8 +81,8 @@ Slate, picked in the look pass on 2026-11-10: dark-first and precise, with an in
   | Tick | 300 ms | `move` | setup checks drawing in, progress growing |
   | Stagger | 70 ms apart | | pairing digits sharpening into focus |
   | Catch | 1 s | | the icon's ball flying in, once, on the home screen |
-  | Live ring | 2.4 s loop | | around the other device while connected |
-  | Sweep | 6 s loop | linear | a light circling the connected card |
+  | Live ring | 2.4 s, 3 beats | | around the other device when it connects and when the app comes back to the front, then gone |
+  | Sweep | 6 s, one turn | linear | a light circling the connected card at the same moments, then resting as a glint |
 
 - **Icon: Catch,** a ball flying into a C-shaped catch: a white C, two trail lines and an indigo ball on a slate tile.
   - **Sources:** `docs/brand/icon.svg` (the tile) and `docs/brand/glyph.svg` (one colour).

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,8 +6,10 @@ import 'package:gotit/app/theme/gotit_colors.dart';
 import 'package:gotit/app/theme/gotit_motion.dart';
 import 'package:gotit/app/theme/gotit_theme.dart';
 
-/// A card whose border carries a slow sweep of light while [live]: the
-/// connected look.
+/// A card whose border carries a glint of light while [live]: the connected
+/// look. The glint makes one slow turn when the card goes live and when the
+/// app comes back to the front, then rests, so an open window costs nothing
+/// while it sits there.
 class SweepCard extends StatefulWidget {
   const SweepCard({
     required this.child,
@@ -26,6 +29,14 @@ class SweepCard extends StatefulWidget {
 class _SweepCardState extends State<SweepCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _sweep = AnimationController(vsync: this);
+  late final AppLifecycleListener _lifecycle;
+  bool _wasLive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _play);
+  }
 
   @override
   void didChangeDependencies() {
@@ -40,17 +51,22 @@ class _SweepCardState extends State<SweepCard>
   }
 
   void _sync() {
+    if (widget.live && !_wasLive) _play();
+    if (!widget.live) _sweep.stop();
+    _wasLive = widget.live;
+  }
+
+  /// One turn, ending where it began.
+  void _play() {
     final turn = GotitMotion.of(context).sweep;
-    if (widget.live && turn > Duration.zero) {
-      if (_sweep.duration != turn) _sweep.duration = turn;
-      if (!_sweep.isAnimating) _sweep.repeat();
-    } else {
-      _sweep.stop();
-    }
+    if (!widget.live || turn <= Duration.zero) return;
+    _sweep.duration = turn;
+    unawaited(_sweep.forward(from: 0));
   }
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _sweep.dispose();
     super.dispose();
   }
@@ -68,13 +84,17 @@ class _SweepCardState extends State<SweepCard>
       child: widget.child,
     );
     if (!widget.live) return card;
-    return CustomPaint(
-      foregroundPainter: _SweepPainter(
-        turn: _sweep,
-        accent: colors.accent,
-        accent2: colors.accent2,
+    // While the glint turns, only the border redraws, not the card's
+    // contents or the page around it.
+    return RepaintBoundary(
+      child: CustomPaint(
+        foregroundPainter: _SweepPainter(
+          turn: _sweep,
+          accent: colors.accent,
+          accent2: colors.accent2,
+        ),
+        child: RepaintBoundary(child: card),
       ),
-      child: card,
     );
   }
 }
