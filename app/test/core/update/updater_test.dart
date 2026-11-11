@@ -88,12 +88,14 @@ void main() {
     required FakeSource source,
     FakeInstaller? installer,
     String? lastSeen,
+    DateTime Function()? clock,
   }) => Updater(
     currentVersion: current,
     source: source,
     installer: installer ?? FakeInstaller(),
     downloadDir: () async => dir,
     lastSeenVersion: lastSeen,
+    clock: clock,
   );
 
   test('a local build never checks', () {
@@ -186,6 +188,29 @@ void main() {
     await subject.check();
     expect(subject.value, isA<UpdateUpToDate>());
   });
+
+  test(
+    'coming back to the app checks again once the last check is old',
+    () async {
+      var now = DateTime(2026, 11, 11, 12);
+      final source = FakeSource(latestRelease: release('0.1.0'));
+      final subject = updater(
+        current: '0.1.0',
+        source: source,
+        clock: () => now,
+      );
+      await subject.checkIfStale();
+      expect(source.latestCalls, 1);
+
+      now = now.add(const Duration(minutes: 9));
+      await subject.checkIfStale();
+      expect(source.latestCalls, 1);
+
+      now = now.add(const Duration(minutes: 1));
+      await subject.checkIfStale();
+      expect(source.latestCalls, 2);
+    },
+  );
 
   test('a failed check says so', () async {
     final subject = updater(current: '0.1.0', source: FakeSource(fail: true));

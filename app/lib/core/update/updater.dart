@@ -67,8 +67,9 @@ class UpdateFailed extends UpdateState {
   final String reason;
 }
 
-/// Checks GitHub Releases at start and every [interval], downloads the newer
-/// release, checks it against SHA256SUMS.txt, and hands it to the [installer].
+/// Checks GitHub Releases at start, every [interval] and when the app comes
+/// back to the front, downloads the newer release, checks it against
+/// SHA256SUMS.txt, and hands it to the [installer].
 class Updater extends ValueNotifier<UpdateState> {
   Updater({
     required this.currentVersion,
@@ -77,7 +78,10 @@ class Updater extends ValueNotifier<UpdateState> {
     required this.downloadDir,
     this.lastSeenVersion,
     this.interval = const Duration(hours: 6),
-  }) : super(const UpdateIdle());
+    this.freshFor = const Duration(minutes: 10),
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now,
+       super(const UpdateIdle());
 
   final String currentVersion;
   final UpdateSource source;
@@ -87,6 +91,12 @@ class Updater extends ValueNotifier<UpdateState> {
   /// The version that ran last time, if known: a lower one means we just updated.
   final String? lastSeenVersion;
   final Duration interval;
+
+  /// How long a check counts as recent when the app comes back to the front.
+  /// GitHub allows 60 unsigned requests an hour from one network.
+  final Duration freshFor;
+  final DateTime Function() _clock;
+  DateTime? _checkedAt;
 
   ReleaseInfo? _release;
   Timer? _timer;
@@ -105,9 +115,19 @@ class Updater extends ValueNotifier<UpdateState> {
     _timer ??= Timer.periodic(interval, (_) => unawaited(check()));
   }
 
+  /// The app came back to the front. The phone app keeps running in the
+  /// background, so opening it doesn't start it again: check here instead,
+  /// unless a check was recent.
+  Future<void> checkIfStale() async {
+    final at = _checkedAt;
+    if (at != null && _clock().difference(at) < freshFor) return;
+    await check();
+  }
+
   Future<void> check() async {
     if (_busy || isLocalBuild(currentVersion)) return;
     _busy = true;
+    _checkedAt = _clock();
     if (value is! UpdateAvailable) value = const UpdateChecking();
     try {
       final release = await source.latest();

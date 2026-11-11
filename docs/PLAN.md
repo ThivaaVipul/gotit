@@ -367,3 +367,4 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-10: M2b1 merged (PR #5, v0.3.0). M2b2 built, tested on both devices, and merged (PR #6, v0.4.0): the phone and the PC pair by code or QR.
 - 2026-11-11: M2c planned in two parts (M2c1 background link and text from the PC, M2c2 the automatic copy watcher). Copies that Windows password managers mark as private still cross, as sensitive.
 - 2026-11-11: M2c1 built and checked on both devices. Text crosses from the PC by itself and from the phone with Send, also with the app swiped away.
+- 2026-11-11: M2c1 merged (PR #7) and released as v0.5.0; both apps updated. The phone app now keeps running in the background, so opening it no longer started an update check: it missed v0.5.0 until restarted. It now checks whenever it comes back to the front, unless it checked in the last 10 minutes.
