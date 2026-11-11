@@ -1,15 +1,18 @@
 package app.gotit
 
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
@@ -20,6 +23,13 @@ import java.io.File
 object Channels {
     private val main = Handler(Looper.getMainLooper())
     private var clipboard: MethodChannel? = null
+    private var setup: MethodChannel? = null
+
+    // The setup steps you mark done yourself, and whether their page was opened.
+    private const val PREFS = "setup"
+    private const val AUTOSTART = "autostartDone"
+    private const val AUTOSTART_OPENED = "autostartOpened"
+    private const val LOCKED = "lockedDone"
 
     fun register(context: Context, engine: FlutterEngine) {
         val app = context.applicationContext
@@ -106,35 +116,104 @@ object Channels {
         }
 
         // The setup checklist: what is done, and the pages that do the rest.
-        MethodChannel(messenger, "app.gotit/setup").setMethodCallHandler { call, result ->
-            when (call.method) {
-                "status" -> result.success(
-                    mapOf(
-                        "notifications" to app.getSystemService(NotificationManager::class.java)
-                            .areNotificationsEnabled(),
-                        "battery" to app.getSystemService(PowerManager::class.java)
-                            .isIgnoringBatteryOptimizations(app.packageName),
-                        "maker" to Build.MANUFACTURER,
-                    ),
+        // Kotlin also calls "watcher" when the copy watcher starts or stops.
+        setup = MethodChannel(messenger, "app.gotit/setup").apply {
+            setMethodCallHandler { call, result -> onSetupCall(app, call, result) }
+        }
+    }
+
+    private fun onSetupCall(app: Context, call: MethodCall, result: MethodChannel.Result) {
+        val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        when (call.method) {
+            "status" -> result.success(
+                mapOf(
+                    "notifications" to app.getSystemService(NotificationManager::class.java)
+                        .areNotificationsEnabled(),
+                    "battery" to app.getSystemService(PowerManager::class.java)
+                        .isIgnoringBatteryOptimizations(app.packageName),
+                    "watcher" to CopyWatchService.state(app),
+                    // Android 13 and later grey out the accessibility switch of
+                    // apps installed from outside a store until "Allow
+                    // restricted settings" is chosen. Apps can't read that
+                    // setting (a SecurityException), so Dart offers the way
+                    // there whenever the watcher is off.
+                    "restricted" to (Build.VERSION.SDK_INT >= 33),
+                    "autostart" to prefs.getBoolean(AUTOSTART, false),
+                    "autostartOpened" to prefs.getBoolean(AUTOSTART_OPENED, false),
+                    "locked" to prefs.getBoolean(LOCKED, false),
+                    "maker" to Build.MANUFACTURER,
+                ),
+            )
+            "battery" -> {
+                // Android's own "let it run in the background" prompt; its list as a fallback.
+                open(
+                    app,
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${app.packageName}")),
+                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
                 )
-                "battery" -> {
-                    // Android's own "let it run in the background" prompt; its list as a fallback.
-                    val asked = Intent(
-                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:${app.packageName}"),
-                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    try {
-                        app.startActivity(asked)
-                    } catch (e: RuntimeException) {
-                        app.startActivity(
-                            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    }
-                    result.success(null)
-                }
-                else -> result.notImplemented()
+                result.success(null)
             }
+            "watcher" -> {
+                // Apps can't open a service's own page (Settings guards it), so
+                // the list, asking Settings to highlight Gotit where it can.
+                val me = ComponentName(app, CopyWatchService::class.java).flattenToString()
+                open(
+                    app,
+                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .putExtra(":settings:fragment_args_key", me)
+                        .putExtra(":settings:show_fragment_args", Bundle().apply {
+                            putString(":settings:fragment_args_key", me)
+                        }),
+                    Intent(Settings.ACTION_SETTINGS),
+                )
+                result.success(null)
+            }
+            "appInfo" -> {
+                // "Allow restricted settings": a switch at the bottom of MIUI's
+                // app info page, in the menu on other phones.
+                open(app, appInfo(app), Intent(Settings.ACTION_SETTINGS))
+                result.success(null)
+            }
+            "autostart" -> {
+                // MIUI's Autostart list (in its Security app); app info otherwise.
+                prefs.edit().putBoolean(AUTOSTART_OPENED, true).apply()
+                open(
+                    app,
+                    Intent().setComponent(
+                        ComponentName(
+                            "com.miui.securitycenter",
+                            "com.miui.permcenter.autostart.AutoStartManagementActivity",
+                        ),
+                    ),
+                    appInfo(app),
+                )
+                result.success(null)
+            }
+            "mark" -> {
+                when (call.argument<String>("step")) {
+                    "autostart" -> prefs.edit().putBoolean(AUTOSTART, true).apply()
+                    "locked" -> prefs.edit().putBoolean(LOCKED, true).apply()
+                }
+                result.success(null)
+            }
+            else -> result.notImplemented()
+        }
+    }
+
+    /** The copy watcher started or stopped. */
+    fun watcherChanged(context: Context) {
+        val state = CopyWatchService.state(context.applicationContext)
+        main.post { setup?.invokeMethod("watcher", state) }
+    }
+
+    private fun appInfo(context: Context) =
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+
+    private fun open(context: Context, page: Intent, fallback: Intent) {
+        try {
+            context.startActivity(page.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: RuntimeException) {
+            context.startActivity(fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
 

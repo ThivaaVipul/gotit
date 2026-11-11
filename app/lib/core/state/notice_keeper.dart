@@ -4,13 +4,15 @@ import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
 
 /// Keeps the phone's ongoing notification in step with the link: there while
-/// paired, saying how the link stands, and "Sent to" the PC for a while after
-/// a copy crossed. It changes quietly, with no sound.
+/// paired, saying how the link stands, "Sent to" the PC for a while after a
+/// copy crossed, and when MIUI has stopped the copy watcher. It changes
+/// quietly, with no sound.
 class NoticeKeeper {
   NoticeKeeper({
     required this.states,
     required this.current,
     required this.notice,
+    this.watcher,
     this.sentFor = const Duration(minutes: 1),
   });
 
@@ -18,20 +20,30 @@ class NoticeKeeper {
   final Stream<PhoneLinkState> states;
   final PhoneLinkState Function() current;
   final LinkNotice notice;
+
+  /// The copy watcher starting and stopping.
+  final Stream<WatcherState>? watcher;
   final Duration sentFor;
 
   StreamSubscription<PhoneLinkState>? _listening;
+  StreamSubscription<WatcherState>? _watching;
+  WatcherState? _watcher;
   Timer? _sentTimer;
   bool _sentRecently = false;
   (String, String?)? _shown;
 
   void start() {
     _listening = states.listen(_update);
+    _watching = watcher?.listen((state) {
+      _watcher = state;
+      _update(current());
+    });
     _update(current());
   }
 
   Future<void> stop() async {
     await _listening?.cancel();
+    await _watching?.cancel();
     _sentTimer?.cancel();
   }
 
@@ -62,7 +74,11 @@ class NoticeKeeper {
     };
     final text = _sentRecently && state.connection == Connection.online
         ? 'Sent to ${pc.name}'
-        : null;
+        : switch (_watcher) {
+            WatcherState.stopped => 'Copy watching stopped',
+            WatcherState.turnedOff => 'Copy watching is off',
+            _ => null,
+          };
     final next = (title, text);
     if (next == _shown) return;
     _shown = next;

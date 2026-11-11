@@ -1,6 +1,8 @@
 package app.gotit
 
 import android.app.Application
+import android.os.Handler
+import android.os.Looper
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
@@ -17,6 +19,12 @@ class GotitApplication : Application() {
         Channels.register(this, engine)
         engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
         FlutterEngineCache.getInstance().put(ENGINE, engine)
+        // A copy watcher that is switched on but never started (MIUI marked it
+        // crashed) shows only once Android had its chance to start it.
+        Handler(Looper.getMainLooper()).postDelayed(
+            { Channels.watcherChanged(this) },
+            CopyWatchService.STARTUP_GRACE_MS + 1000,
+        )
     }
 
     companion object {

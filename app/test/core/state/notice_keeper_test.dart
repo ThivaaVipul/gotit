@@ -78,6 +78,36 @@ void main() {
     expect(notice.hidden, 1);
   });
 
+  test('says when MIUI stopped the copy watcher', () async {
+    final watcher = StreamController<WatcherState>.broadcast();
+    final watched = NoticeKeeper(
+      states: states.stream,
+      current: () => current,
+      notice: notice,
+      watcher: watcher.stream,
+    )..start();
+    await change(const PhoneLinkState(pc: _pc, connection: Connection.online));
+
+    watcher.add(WatcherState.stopped);
+    await Future<void>.delayed(Duration.zero);
+    expect(notice.shown.last, (
+      'Connected to Desk PC',
+      'Copy watching stopped',
+    ));
+
+    watcher.add(WatcherState.on);
+    await Future<void>.delayed(Duration.zero);
+    expect(notice.shown.last, ('Connected to Desk PC', null));
+
+    // Android switches it off when MIUI force-stops the app.
+    watcher.add(WatcherState.turnedOff);
+    await Future<void>.delayed(Duration.zero);
+    expect(notice.shown.last, ('Connected to Desk PC', 'Copy watching is off'));
+
+    await watched.stop();
+    await watcher.close();
+  });
+
   test('does not repeat itself', () async {
     keeper.start();
     await change(const PhoneLinkState(pc: _pc, connection: Connection.online));

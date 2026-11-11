@@ -154,21 +154,23 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 
 ## Phone app (Android)
 
-- **Background:** the link runs in a foreground service, type `connectedDevice`, through `flutter_foreground_task` (version to check). That service owns the ongoing notification, which has Send and the switch. The guided setup covers notifications, MIUI's Autostart and battery set to "No restrictions", so Doze doesn't cut the connection.
+- **Background:** the Flutter engine starts with the app's process and outlives its window, and a small Kotlin foreground service (`LinkService`, type `connectedDevice`) keeps the process running while paired. That service owns the ongoing notification, which has Send and, from M2d, the switch. The guided setup covers notifications, MIUI's Autostart and battery set to "No restrictions", so Doze doesn't cut the connection.
 - **Phone to PC (copies),** as proven in M0:
   - **Watching:** an accessibility service (Kotlin) looks for three signals:
     - a tap on a Copy label (a long label that starts with "Copy" counts too);
     - a "copied" notice;
     - a Copy item leaving the screen.
-  - **Reading:** once a signal fires, the service reads the clipboard through a 1-pixel invisible accessibility overlay that takes focus for a moment. An invisible activity is the backup.
-  - **Polling:** some apps never report taps (Compose and Flutter apps; Google Messages' message menu announces nothing at all). Those get a light screen check about 3 times a second while they're in front. Gotit learns which apps those are, and other apps aren't polled, since polling everything cost about 6% of a CPU core.
-  - **Handing over:** the service runs in the app's process and passes each clip to the link task through a small native channel.
+  - **Reading:** once a signal fires, the service reads the clipboard through a 1-pixel invisible accessibility overlay that takes focus for a moment. An invisible activity is the backup. It reads only while paired (the link service is running).
+  - **Which reads count:** a clip copied more than 3 seconds before the signal is the previous one, so it gets one more look 0.7 seconds later and is otherwise dropped. Gotit's own writes (text from the PC, labelled "Gotit") never go back, and one copy that fires several signals crosses once.
+  - **Polling:** some apps never report taps (Compose and Flutter apps; Google Messages' message menu announces nothing at all). Those get a light screen check about 3 times a second while they're in front, and on their screen changes. Gotit learns which apps those are: an app that has reported a tap isn't checked, unless a copy there was once caught only by the screen check. Google Messages is always checked. Popup windows with a Copy item are tracked in every app, since that costs little. Polling everything cost about 6% of a CPU core.
+  - **Handing over:** the service runs in the app's process and passes each clip to Dart through the clipboard channel, where the same guard as Send applies.
   - **Setup:** the guided setup asks for:
     - the accessibility main switch (not its shortcut);
     - Autostart;
     - the battery set to No restrictions;
     - the lock in recents.
-  - **A dead watcher:** after a swipe-away without Autostart, MIUI marks the service as crashed, so it is enabled but not running. Gotit spots that, says so, and opens the switch in one tap.
+  - **The checklist** reads the watcher's state. On Android 13 and later the switch may be greyed out until "Allow restricted settings" is chosen in App info. Apps can't read that setting (asking throws a `SecurityException`), so while the watcher is switched off the checklist offers App info, with a hint until the watcher has run once. Autostart (MIUI's list in its Security app) and the lock are Xiaomi only, and you mark them done yourself, since no app can read them.
+  - **A dead watcher:** a swipe-away without Autostart force-stops the app. Android then either marks the service as crashed (switched on, not running; seen in M0) or switches it off altogether (seen in M2c2). Gotit spots both: switched on but not running 20 seconds after the process started, or switched off after it had run. It says so in the ongoing notification and the checklist, and opens the switch in one tap.
   - **The Send button:** the notification's Send button always works, through the invisible activity.
 - **PC to phone (copies):** the link task writes the clipboard from the service. Text goes in as plain text. An image is saved to the app's cache, and its content URI is put on the clipboard through a `FileProvider`, so apps that accept images can paste it.
 - **Screenshots:** a `ContentObserver` on MediaStore picks up new files in the Screenshots folder (photo access: `READ_MEDIA_IMAGES`) and sends each one as an image clip.
@@ -235,5 +237,5 @@ Nothing else is stored, and nothing leaves the local network except the update c
 - Mutual TLS with self-signed certificates in `dart:io`: each side trusting exactly the other's certificate, on both platforms.
 - `bonsoir` on Windows. Advertising uses the DNS-SD API in Windows 10 and later.
 - The leanflutter packages' build hooks on the Windows runner, and Inno Setup on the runner image.
-- `flutter_foreground_task` with type `connectedDevice` on Android 13 under MIUI, and how Doze treats the connection with and without the battery exemption.
+- How Doze treats the connection over a long idle stretch, with and without the battery exemption. (The `connectedDevice` service itself was checked on Android 13 under MIUI in M2c1, including a swipe-away.)
 - The battery cost of the copy watcher over a normal day, polling only the apps that need it.

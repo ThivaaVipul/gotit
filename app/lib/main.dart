@@ -81,6 +81,7 @@ Future<void> main(List<String> args) async {
   PcLink? pcLink;
   PhoneLink? phoneLink;
   PcFinder? finder;
+  PhoneSetup? phoneSetup;
   if (Platform.isWindows) {
     pcLink = PcLink(
       identity: identity,
@@ -111,10 +112,13 @@ Future<void> main(List<String> args) async {
     // The ongoing notification keeps the link running while paired, and
     // says "Sent to <PC>" after a copy crossed.
     final link = phoneLink;
+    final setup = ChannelPhoneSetup();
+    phoneSetup = setup;
     final notice = NoticeKeeper(
       states: link.states,
       current: () => link.state,
       notice: const ChannelLinkNotice(),
+      watcher: setup.watcherChanges,
     )..start();
     ClipBridge(
       link: phoneLink,
@@ -135,7 +139,7 @@ Future<void> main(List<String> args) async {
         pcLink: pcLink,
         phoneLink: phoneLink,
         finder: finder,
-        phoneSetup: Platform.isAndroid ? const ChannelPhoneSetup() : null,
+        phoneSetup: phoneSetup,
       ),
     ),
   );

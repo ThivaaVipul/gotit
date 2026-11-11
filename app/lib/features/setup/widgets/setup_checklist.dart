@@ -14,14 +14,24 @@ class SetupStep {
     required this.done,
     required this.action,
     required this.onTap,
+    this.hint,
+    this.secondary,
+    this.onSecondary,
   });
 
   final String label;
   final bool done;
 
-  /// The button's word: Allow, Open.
+  /// The button's word: Allow, Open, Done.
   final String action;
   final VoidCallback onTap;
+
+  /// A short line under the label, for a step that needs one.
+  final String? hint;
+
+  /// A second, quieter button before the main one.
+  final String? secondary;
+  final VoidCallback? onSecondary;
 }
 
 /// The phone's setup steps, on home until they are all done.
@@ -73,6 +83,32 @@ class _RefreshOnReturnState extends State<_RefreshOnReturn> {
 class _ChecklistView extends StatelessWidget {
   const _ChecklistView();
 
+  /// The copy watcher: off, on, or stopped or turned off after MIUI killed
+  /// the app. Android 13 may grey out its switch for apps from outside a
+  /// store until restricted settings are allowed in the app's info page, so
+  /// while it is switched off, App info is one tap away.
+  static SetupStep _watcherStep(SetupStatus status, SetupCubit cubit) {
+    final appInfo =
+        status.restricted &&
+        (status.watcher == WatcherState.off ||
+            status.watcher == WatcherState.turnedOff);
+    return SetupStep(
+      label: 'Copy watching',
+      done: status.watcher == WatcherState.on,
+      hint: switch (status.watcher) {
+        WatcherState.stopped => 'Stopped. Switch it off and on again',
+        WatcherState.turnedOff => 'Turned off. Switch it on again',
+        WatcherState.off when status.restricted =>
+          'Greyed out? Allow restricted settings in App info',
+        _ => null,
+      },
+      action: 'Open',
+      onTap: () => unawaited(cubit.openWatcher()),
+      secondary: appInfo ? 'App info' : null,
+      onSecondary: () => unawaited(cubit.openAppInfo()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final motion = GotitMotion.of(context);
@@ -94,6 +130,28 @@ class _ChecklistView extends StatelessWidget {
                   action: 'Open',
                   onTap: () => unawaited(cubit.askBattery()),
                 ),
+                _watcherStep(status, cubit),
+                if (status.xiaomi) ...[
+                  SetupStep(
+                    label: 'Autostart',
+                    done: status.autostart,
+                    action: status.autostartOpened ? 'Done' : 'Open',
+                    onTap: () => unawaited(
+                      status.autostartOpened
+                          ? cubit.mark('autostart')
+                          : cubit.openAutostart(),
+                    ),
+                    secondary: status.autostartOpened ? 'Open' : null,
+                    onSecondary: () => unawaited(cubit.openAutostart()),
+                  ),
+                  SetupStep(
+                    label: 'Lock in recents',
+                    hint: 'Recents: hold Gotit, tap the lock',
+                    done: status.locked,
+                    action: 'Done',
+                    onTap: () => unawaited(cubit.mark('locked')),
+                  ),
+                ],
               ];
         final show = steps.any((step) => !step.done);
         return AnimatedSize(
@@ -184,8 +242,10 @@ class _StepRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final colors = GotitColors.of(context);
     final motion = GotitMotion.of(context);
-    return SizedBox(
-      height: 48,
+    final hint = step.done ? null : step.hint;
+    final secondary = step.done ? null : step.secondary;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
       child: Row(
         children: [
           AnimatedContainer(
@@ -207,13 +267,33 @@ class _StepRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              step.label,
-              style: text.bodyLarge?.copyWith(
-                color: step.done ? colors.muted : colors.fg,
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: hint == null ? 0 : 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    step.label,
+                    style: text.bodyLarge?.copyWith(
+                      color: step.done ? colors.muted : colors.fg,
+                    ),
+                  ),
+                  if (hint != null)
+                    Text(
+                      hint,
+                      style: text.bodySmall?.copyWith(color: colors.muted),
+                    ),
+                ],
               ),
             ),
           ),
+          if (secondary != null)
+            TextButton(
+              onPressed: step.onSecondary,
+              style: TextButton.styleFrom(foregroundColor: colors.muted),
+              child: Text(secondary),
+            ),
           if (!step.done)
             TextButton(onPressed: step.onTap, child: Text(step.action)),
         ],
