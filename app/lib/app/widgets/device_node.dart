@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:gotit/app/theme/gotit_colors.dart';
 import 'package:gotit/app/theme/gotit_motion.dart';
 
-/// A device on the link: an icon on a soft accent tile. While [live], a ring
-/// pulses out from it every couple of seconds.
+/// A device on the link: an icon on a soft accent tile. When it goes [live],
+/// and when the app comes back to the front, a ring pulses out from it a few
+/// times, then rests, so an open window costs nothing while it sits there.
 class DeviceNode extends StatefulWidget {
   const DeviceNode({
     required this.icon,
@@ -26,7 +29,18 @@ class DeviceNode extends StatefulWidget {
 
 class _DeviceNodeState extends State<DeviceNode>
     with SingleTickerProviderStateMixin {
+  /// Pulses each time the ring plays.
+  static const _beats = 3;
+
   late final AnimationController _ring = AnimationController(vsync: this);
+  late final AppLifecycleListener _lifecycle;
+  bool _wasLive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _play);
+  }
 
   @override
   void didChangeDependencies() {
@@ -41,19 +55,21 @@ class _DeviceNodeState extends State<DeviceNode>
   }
 
   void _sync() {
+    if (widget.live && !_wasLive) _play();
+    if (!widget.live) _ring.stop();
+    _wasLive = widget.live;
+  }
+
+  void _play() {
     final beat = GotitMotion.of(context).ring;
-    if (widget.live && beat > Duration.zero) {
-      if (_ring.duration != beat) _ring.duration = beat;
-      if (!_ring.isAnimating) _ring.repeat();
-    } else {
-      _ring
-        ..stop()
-        ..value = 0;
-    }
+    if (!widget.live || beat <= Duration.zero) return;
+    _ring.duration = beat;
+    unawaited(_ring.repeat(count: _beats));
   }
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _ring.dispose();
     super.dispose();
   }
@@ -70,23 +86,30 @@ class _DeviceNodeState extends State<DeviceNode>
         children: [
           if (widget.live)
             Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _ring,
-                builder: (context, _) {
-                  final t = Curves.decelerate.transform(_ring.value);
-                  return Opacity(
-                    opacity: (1 - t) * 0.55,
-                    child: Transform.scale(
+              // Only the ring redraws while it pulses.
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _ring,
+                  builder: (context, _) {
+                    // Drawn only while it plays.
+                    if (!_ring.isAnimating) return const SizedBox.shrink();
+                    final t = Curves.decelerate.transform(_ring.value);
+                    return Transform.scale(
                       scale: 1 + 0.45 * t,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           borderRadius: radius,
-                          border: Border.all(color: colors.accent, width: 2),
+                          border: Border.all(
+                            color: colors.accent.withValues(
+                              alpha: (1 - t) * 0.55,
+                            ),
+                            width: 2,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           Positioned.fill(
