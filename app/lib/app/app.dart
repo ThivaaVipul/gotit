@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gotit/app/services.dart';
@@ -68,7 +70,12 @@ class _PhoneHomeState extends State<_PhoneHome> {
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onResume: widget.link.retryNow);
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        widget.link.retryNow();
+        unawaited(widget.services.updater.checkIfStale());
+      },
+    );
   }
 
   @override
