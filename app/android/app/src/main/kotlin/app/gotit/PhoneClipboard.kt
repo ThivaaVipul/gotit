@@ -9,8 +9,14 @@ import android.os.PersistableBundle
 
 /** Text on the phone's clipboard. Nothing read or written is kept or logged. */
 object PhoneClipboard {
-    /** What was copied: text, whether the copying app marked it sensitive, and when. */
-    data class Copy(val text: String, val sensitive: Boolean, val copiedAt: Long)
+    /** Gotit's own writes carry this label. */
+    private const val LABEL = "Gotit"
+
+    /**
+     * What was copied: text, whether the copying app marked it sensitive,
+     * when, and whether Gotit itself wrote it (text from the PC).
+     */
+    data class Copy(val text: String, val sensitive: Boolean, val copiedAt: Long, val ours: Boolean)
 
     /** Null when Android refuses (Gotit isn't focused) or there is no text. */
     fun read(context: Context): Copy? {
@@ -28,12 +34,12 @@ object PhoneClipboard {
         if (text.isNullOrEmpty()) return null
         val sensitive = Build.VERSION.SDK_INT >= 33 &&
             description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true
-        return Copy(text, sensitive, description.timestamp)
+        return Copy(text, sensitive, description.timestamp, description.label?.toString() == LABEL)
     }
 
     /** Background apps may write the clipboard; this is how text from the PC arrives. */
     fun write(context: Context, text: String, sensitive: Boolean) {
-        val clip = ClipData.newPlainText("Gotit", text)
+        val clip = ClipData.newPlainText(LABEL, text)
         if (sensitive) {
             // Android 13 and later hide a sensitive clip's preview.
             clip.description.extras = PersistableBundle().apply {

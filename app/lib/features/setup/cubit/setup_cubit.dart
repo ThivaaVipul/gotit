@@ -10,10 +10,12 @@ class SetupCubit extends Cubit<SetupStatus?> {
     this._setup, {
     this.recheckAfter = const [Duration(seconds: 1), Duration(seconds: 3)],
   }) : super(null) {
+    _watcher = _setup.watcherChanges.listen((_) => unawaited(refresh()));
     unawaited(refresh());
   }
 
   final PhoneSetup _setup;
+  late final StreamSubscription<WatcherState> _watcher;
 
   /// Some makers' pages save a moment after they close (MIUI's battery
   /// saver does), so a step still open on return is read again after these.
@@ -50,6 +52,21 @@ class SetupCubit extends Cubit<SetupStatus?> {
 
   Future<void> askBattery() => _setup.askBattery();
 
+  Future<void> openWatcher() => _setup.openWatcher();
+
+  Future<void> openAppInfo() => _setup.openAppInfo();
+
+  Future<void> openAutostart() async {
+    await _setup.openAutostart();
+    await refresh();
+  }
+
+  /// A step only you can tell is done.
+  Future<void> mark(String step) async {
+    await _setup.mark(step);
+    await refresh();
+  }
+
   void _cancelRechecks() {
     for (final timer in _rechecks) {
       timer.cancel();
@@ -58,8 +75,9 @@ class SetupCubit extends Cubit<SetupStatus?> {
   }
 
   @override
-  Future<void> close() {
+  Future<void> close() async {
     _cancelRechecks();
+    await _watcher.cancel();
     return super.close();
   }
 }

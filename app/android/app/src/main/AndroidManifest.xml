@@ -40,7 +40,8 @@
             </intent-filter>
         </activity>
         <!-- Invisible: takes focus for a moment so Android lets it read the
-             clipboard (the notification's Send), then closes. -->
+             clipboard (the notification's Send, or the copy watcher's
+             backup), then closes. -->
         <activity
             android:name=".ReadClipActivity"
             android:excludeFromRecents="true"
@@ -48,6 +49,20 @@
             android:noHistory="true"
             android:taskAffinity="app.gotit.read"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- The copy watcher: notices copies made on this phone and reads them,
+             so they reach the PC. A normal switch in Accessibility settings. -->
+        <service
+            android:name=".CopyWatchService"
+            android:exported="true"
+            android:label="@string/watcher_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/copy_watch" />
+        </service>
         <!-- Keeps the link to the PC running, with its ongoing notification. -->
         <service
             android:name=".LinkService"

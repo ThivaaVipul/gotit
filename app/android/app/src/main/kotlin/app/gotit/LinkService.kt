@@ -53,7 +53,11 @@ class LinkService : Service() {
         private const val TITLE = "title"
         private const val TEXT = "text"
 
+        @Volatile
         private var instance: LinkService? = null
+
+        /** Running while paired: the copy watcher only reads then. */
+        val running: Boolean get() = instance != null
         private var title = "Gotit"
         private var text: String? = null
 

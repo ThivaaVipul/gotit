@@ -1,10 +1,38 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
+
+/// Whether the copy watcher (an accessibility service) runs.
+enum WatcherState {
+  off,
+  on,
+
+  /// Switched on in Settings but not running: MIUI stopped it after the app
+  /// was killed, and it stays stopped until switched off and on again.
+  stopped,
+
+  /// Switched off after it had run: Android turns it off when MIUI
+  /// force-stops the app (a swipe-away without Autostart).
+  turnedOff;
+
+  static WatcherState parse(Object? value) => switch (value) {
+    'on' => on,
+    'stopped' => stopped,
+    'turnedOff' => turnedOff,
+    _ => off,
+  };
+}
 
 /// What the phone's setup checklist needs to know.
 class SetupStatus {
   const SetupStatus({
     this.notifications = false,
     this.battery = false,
+    this.watcher = WatcherState.off,
+    this.restricted = false,
+    this.autostart = false,
+    this.autostartOpened = false,
+    this.locked = false,
     this.maker = '',
   });
 
@@ -15,11 +43,31 @@ class SetupStatus {
   /// in the background.
   final bool battery;
 
+  /// The copy watcher, which sends this phone's copies by itself.
+  final WatcherState watcher;
+
+  /// Android 13 and later may keep the watcher's switch greyed out (for apps
+  /// installed from outside a store) until "Allow restricted settings" is
+  /// chosen. Apps can't read whether it was, so this only says it may be.
+  final bool restricted;
+
+  /// MIUI's Autostart, which only you can tell is on, and whether its page
+  /// was opened.
+  final bool autostart;
+  final bool autostartOpened;
+
+  /// Gotit locked in MIUI's recents, which only you can tell.
+  final bool locked;
+
   /// The phone's maker, for steps only some makers need.
   final String maker;
 
   /// Every step is done, so the checklist can go.
-  bool get done => notifications && battery;
+  bool get done =>
+      notifications &&
+      battery &&
+      watcher == WatcherState.on &&
+      (!xiaomi || (autostart && locked));
 
   bool get xiaomi {
     final m = maker.toLowerCase();
@@ -36,13 +84,36 @@ abstract interface class PhoneSetup {
 
   /// Android's "let it run in the background" prompt.
   Future<void> askBattery();
+
+  /// The copy watcher's switch in Accessibility settings.
+  Future<void> openWatcher();
+
+  /// Gotit's app info page, which has "Allow restricted settings" (a switch
+  /// at the bottom on MIUI, in the menu elsewhere).
+  Future<void> openAppInfo();
+
+  /// MIUI's Autostart list, in its Security app.
+  Future<void> openAutostart();
+
+  /// A step only you can tell is done: `autostart` or `locked`.
+  Future<void> mark(String step);
+
+  /// The copy watcher started or stopped.
+  Stream<WatcherState> get watcherChanges;
 }
 
 class ChannelPhoneSetup implements PhoneSetup {
-  const ChannelPhoneSetup();
+  ChannelPhoneSetup() {
+    _setup.setMethodCallHandler((call) async {
+      if (call.method == 'watcher') {
+        _watcher.add(WatcherState.parse(call.arguments));
+      }
+    });
+  }
 
   static const _setup = MethodChannel('app.gotit/setup');
   static const _window = MethodChannel('app.gotit/activity');
+  final _watcher = StreamController<WatcherState>.broadcast();
 
   @override
   Future<SetupStatus> status() async {
@@ -50,6 +121,11 @@ class ChannelPhoneSetup implements PhoneSetup {
     return SetupStatus(
       notifications: map['notifications'] == true,
       battery: map['battery'] == true,
+      watcher: WatcherState.parse(map['watcher']),
+      restricted: map['restricted'] == true,
+      autostart: map['autostart'] == true,
+      autostartOpened: map['autostartOpened'] == true,
+      locked: map['locked'] == true,
       maker: map['maker'] as String? ?? '',
     );
   }
@@ -60,6 +136,22 @@ class ChannelPhoneSetup implements PhoneSetup {
 
   @override
   Future<void> askBattery() => _setup.invokeMethod<void>('battery');
+
+  @override
+  Future<void> openWatcher() => _setup.invokeMethod<void>('watcher');
+
+  @override
+  Future<void> openAppInfo() => _setup.invokeMethod<void>('appInfo');
+
+  @override
+  Future<void> openAutostart() => _setup.invokeMethod<void>('autostart');
+
+  @override
+  Future<void> mark(String step) =>
+      _setup.invokeMethod<void>('mark', {'step': step});
+
+  @override
+  Stream<WatcherState> get watcherChanges => _watcher.stream;
 }
 
 /// The phone's ongoing notification, which also keeps the link running.
