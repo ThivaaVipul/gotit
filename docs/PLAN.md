@@ -197,7 +197,7 @@ Each milestone gets a short grilling of its details before code.
       - **The PC:** runs the new setup silently and steps aside; the setup restarts Gotit, which then shows "Updated". A proper notice comes with the tray in M2.
       - **Local builds (0.0.0)** never update.
       - **Checks:** 20 tests, analysis clean, and Android and Windows builds pass.
-- [ ] **M2 Connecting, text and the switch** (decisions above), in four pull requests:
+- [x] **M2 Connecting, text and the switch** (decisions above), in four pull requests:
   - [x] **M2a Look** (PR #4, released as v0.2.0, which both apps installed by themselves): three directions on one HTML page, then the chosen theme (light and dark) and the icon everywhere. Picked Slate with the Catch icon. Built on 2026-11-10:
     - the Slate theme (`lib/app/theme/`): palette, Inter, motion timings, light and dark;
     - the Catch icon on the Android launcher (vector, with a themed version), the splash, the Windows window, taskbar and installer;
@@ -272,7 +272,7 @@ Each milestone gets a short grilling of its details before code.
         Two fixes came out of it:
         - the phone's name: MIUI keeps the model code in the standard setting and the real name in the Bluetooth name;
         - a connection reset that went unhandled on the phone.
-  - [x] **M2c Text** (M2c1 in PR #7, released as v0.5.0; M2c2 in the next): copied text both ways; the phone's copy watcher and its notification; the setup checklist. Plan (2026-11-11), in two pull requests, each a release:
+  - [x] **M2c Text** (M2c1 in PR #7, released as v0.5.0; M2c2 in PR #9, released as v0.6.0): copied text both ways; the phone's copy watcher and its notification; the setup checklist. Plan (2026-11-11), in two pull requests, each a release:
     - **M2c1, the background link and text from the PC:**
       - **One engine for the app's life:** the phone's Flutter engine starts with the app's process and outlives its window, so the link keeps running in the background. A foreground service of type "connected device" holds the ongoing notification.
       - **The notification:** it shows the link's state and has a Send button that reads the clipboard through an invisible screen (proven in M0). It changes to "Sent to <PC>" with no sound.
@@ -313,7 +313,22 @@ Each milestone gets a short grilling of its details before code.
         106 tests pass and analysis is clean.
 
         Also found: the home screen's always-running animations (the live ring and the light sweeping the connected card) cost about 55% of a CPU core while the window is open. A separate fix follows M2c2.
-  - [ ] **M2d Switch:** the shared switch in the app, the tile, the notification and the tray.
+  - [x] **M2d Switch:** the shared switch in the app, the tile, the notification and the tray. Grilled 2026-11-11, one pull request, released as v0.7.0:
+    - **Plain on/off:** off stays off until turned on again, from either device, and is remembered across restarts. No timed pause.
+    - **Shared:** flipping it on either device, even while the other is away, turns sharing on or off for both; after a reconnect the later change wins (ties by device ID).
+    - **Off stops everything:** the copy watcher reads nothing, PC copies don't reach the phone, and the notification's Send becomes Turn on. The link stays up, so either side can turn sharing back on.
+    - **App (both):** the mockup's "Sharing" row with a switch under the link card ("Copies cross both ways", or "Paused on both devices"). While off, the status reads "Sharing off", the devices dim, and the ring and sweep don't play.
+    - **Phone notification:** Send and Turn off while on; "Sharing off" with Turn on while off.
+    - **Quick settings tile:** "Gotit", on or off; unavailable until paired; works while the PC is away.
+    - **Adding the tile:** a last checklist step, "Quick settings tile", with Android's own prompt. It counts as done once the prompt was answered either way; Gotit's Settings keeps an Add button.
+    - **PC tray:** a Sharing item in the menu, and a greyed tray icon while off.
+    - **Checked on the phone and this PC on 2026-11-11** with test builds. All of these worked:
+      - adding the tile from the checklist with Android's prompt;
+      - turning sharing off and on from the app, the notification's buttons, the tile and the PC tray, each followed by the other device;
+      - while off, nothing crossed either way, and the copy watcher read nothing;
+      - a change made on the phone while the PC was closed won when the PC came back.
+
+      125 tests pass and analysis is clean.
 - [ ] **M3 Images:** copied images both ways, and new phone screenshots to the PC.
 - [ ] **M4 Files:**
   - phone: the share sheet;
@@ -385,3 +400,4 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-11: M2c2 built and checked on the phone: copies made on the phone now reach the PC by themselves. Both dead-watcher cases are covered, after a swipe-away showed Android switching the watcher off rather than leaving it crashed.
 - 2026-11-11: M2c2 merged (PR #9) and released as v0.6.0; both apps updated, the phone just by being opened. The update through Android's installer put "Allow restricted settings" back to denied; the watcher stayed on, and the checklist already offers App info if it is ever switched off.
 - 2026-11-11: The home screen's live ring and sweep ran forever, costing about 55% of a CPU core while the window was open. They now play when the PC connects and when the app comes back to the front, then rest, and only their own small area redraws: 0% CPU with the window open, measured on the phone.
+- 2026-11-11: M2d grilled (plain on/off, the tile offered once in the checklist), built and checked on both devices. With it, M2 is done.

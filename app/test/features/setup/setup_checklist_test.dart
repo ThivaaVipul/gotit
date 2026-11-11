@@ -13,6 +13,7 @@ class FakeSetup implements PhoneSetup {
     this.watcher = WatcherState.off,
     this.restricted = false,
     this.maker = '',
+    this.tileSupported = false,
   });
 
   bool notifications;
@@ -23,6 +24,8 @@ class FakeSetup implements PhoneSetup {
   bool autostart = false;
   bool autostartOpened = false;
   bool locked = false;
+  bool tileSupported;
+  bool tile = false;
 
   final asked = <String>[];
   // Closed in tearDown.
@@ -38,6 +41,8 @@ class FakeSetup implements PhoneSetup {
     autostart: autostart,
     autostartOpened: autostartOpened,
     locked: locked,
+    tileSupported: tileSupported,
+    tile: tile,
     maker: maker,
   );
 
@@ -63,6 +68,12 @@ class FakeSetup implements PhoneSetup {
   Future<void> mark(String step) async {
     if (step == 'autostart') autostart = true;
     if (step == 'locked') locked = true;
+  }
+
+  @override
+  Future<void> addTile() async {
+    asked.add('tile');
+    tile = true;
   }
 
   @override
@@ -183,6 +194,26 @@ void main() {
     setup.watcher = WatcherState.on;
     setup.watcherEvents.add(WatcherState.on);
     await tester.pumpAndSettle();
+    expect(find.text('Finish setup'), findsNothing);
+  });
+
+  testWidgets('offers the quick settings tile where Android can add it', (
+    tester,
+  ) async {
+    setup = FakeSetup(
+      notifications: true,
+      battery: true,
+      watcher: WatcherState.on,
+      tileSupported: true,
+    );
+    await _show(tester, setup);
+    expect(find.text('3 of 4'), findsOneWidget);
+    expect(find.text('Quick settings tile'), findsOneWidget);
+
+    // Answered either way, the step is done.
+    await tester.tap(_button('Add'));
+    await tester.pumpAndSettle();
+    expect(setup.asked, ['tile']);
     expect(find.text('Finish setup'), findsNothing);
   });
 

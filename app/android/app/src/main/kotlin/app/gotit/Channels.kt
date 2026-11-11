@@ -1,9 +1,11 @@
 package app.gotit
 
 import android.app.NotificationManager
+import android.app.StatusBarManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,12 +26,18 @@ object Channels {
     private val main = Handler(Looper.getMainLooper())
     private var clipboard: MethodChannel? = null
     private var setup: MethodChannel? = null
+    private var sharing: MethodChannel? = null
 
     // The setup steps you mark done yourself, and whether their page was opened.
-    private const val PREFS = "setup"
+    const val SETUP_PREFS = "setup"
+    private const val PREFS = SETUP_PREFS
     private const val AUTOSTART = "autostartDone"
     private const val AUTOSTART_OPENED = "autostartOpened"
     private const val LOCKED = "lockedDone"
+
+    // The quick settings tile: added, or Android's prompt answered either way.
+    const val TILE_ADDED = "tileAdded"
+    private const val TILE_ASKED = "tileAsked"
 
     fun register(context: Context, engine: FlutterEngine) {
         val app = context.applicationContext
@@ -105,7 +113,12 @@ object Channels {
         MethodChannel(messenger, "app.gotit/service").setMethodCallHandler { call, result ->
             when (call.method) {
                 "show" -> result.success(
-                    LinkService.show(app, call.argument<String>("title") ?: "Gotit", call.argument<String>("text")),
+                    LinkService.show(
+                        app,
+                        call.argument<String>("title") ?: "Gotit",
+                        call.argument<String>("text"),
+                        sharing = call.argument<Boolean>("sharing") ?: true,
+                    ),
                 )
                 "hide" -> {
                     LinkService.hide(app)
@@ -120,6 +133,30 @@ object Channels {
         setup = MethodChannel(messenger, "app.gotit/setup").apply {
             setMethodCallHandler { call, result -> onSetupCall(app, call, result) }
         }
+
+        // The sharing switch: Dart sends it here for the tile and the copy
+        // watcher; Kotlin sends back taps on the tile and the notification.
+        sharing = MethodChannel(messenger, "app.gotit/sharing").apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "update" -> {
+                        Sharing.update(
+                            app,
+                            on = call.argument<Boolean>("on") ?: true,
+                            paired = call.argument<Boolean>("paired") ?: false,
+                        )
+                        result.success(null)
+                    }
+                    "ready" -> result.success(Sharing.dartReady())
+                    else -> result.notImplemented()
+                }
+            }
+        }
+    }
+
+    /** The tile or a notification button asked to turn sharing on or off. */
+    fun sharingRequested(on: Boolean) {
+        main.post { sharing?.invokeMethod("set", on) }
     }
 
     private fun onSetupCall(app: Context, call: MethodCall, result: MethodChannel.Result) {
@@ -141,6 +178,9 @@ object Channels {
                     "autostart" to prefs.getBoolean(AUTOSTART, false),
                     "autostartOpened" to prefs.getBoolean(AUTOSTART_OPENED, false),
                     "locked" to prefs.getBoolean(LOCKED, false),
+                    // Android 13 and later can offer to add the tile.
+                    "tileSupported" to (Build.VERSION.SDK_INT >= 33),
+                    "tile" to (prefs.getBoolean(TILE_ADDED, false) || prefs.getBoolean(TILE_ASKED, false)),
                     "maker" to Build.MANUFACTURER,
                 ),
             )
@@ -195,6 +235,28 @@ object Channels {
                     "locked" -> prefs.edit().putBoolean(LOCKED, true).apply()
                 }
                 result.success(null)
+            }
+            "tile" -> {
+                // Android's own "Add tile?" prompt. Answers once it was answered.
+                if (Build.VERSION.SDK_INT < 33) {
+                    result.success(false)
+                } else {
+                    app.getSystemService(StatusBarManager::class.java).requestAddTileService(
+                        ComponentName(app, SharingTile::class.java),
+                        app.getString(R.string.tile_label),
+                        Icon.createWithResource(app, R.drawable.ic_stat_gotit),
+                        app.mainExecutor,
+                    ) { answer ->
+                        // 0 not added, 1 already there, 2 added; below 0 the prompt never showed.
+                        if (answer >= 0) prefs.edit().putBoolean(TILE_ASKED, true).apply()
+                        if (answer == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED ||
+                            answer == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED
+                        ) {
+                            prefs.edit().putBoolean(TILE_ADDED, true).apply()
+                        }
+                        result.success(answer >= 0)
+                    }
+                }
             }
             else -> result.notImplemented()
         }

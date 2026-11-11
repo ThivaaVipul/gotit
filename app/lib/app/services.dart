@@ -3,6 +3,7 @@ import 'package:gotit/core/link/pc_link.dart';
 import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/settings.dart';
 import 'package:gotit/core/update/updater.dart';
 
@@ -19,6 +20,7 @@ class AppServices {
     this.phoneLink,
     this.finder,
     this.phoneSetup,
+    this.sharing,
   });
 
   final String version;
@@ -46,6 +48,9 @@ class AppServices {
 
   /// The setup checklist's side on the phone (the phone only).
   final PhoneSetup? phoneSetup;
+
+  /// The shared sharing switch, once paired devices can use it.
+  final SharingSwitch? sharing;
 
   /// The PC's name as the phone shows it.
   String get pcName => effectivePcName(settings.value, windowsName);

@@ -40,6 +40,7 @@ void main() {
   late FakeClipboard clipboard;
   late List<String> sentSigns;
   late List<String> arrivals;
+  late bool sharingOn;
 
   tearDown(() async {
     await link.incoming.close();
@@ -51,9 +52,11 @@ void main() {
     clipboard = FakeClipboard();
     sentSigns = [];
     arrivals = [];
+    sharingOn = true;
     ClipBridge(
       link: link,
       clipboard: clipboard,
+      sharing: () => sharingOn,
       onSent: (clip) => sentSigns.add(clip.text),
       onArrived: (clip) => arrivals.add(clip.text),
     ).start();
@@ -95,6 +98,17 @@ void main() {
     clipboard.local.add(Clip(text: 'from the PC', manual: true));
     await settle();
     expect(link.sent, ['from the PC']);
+  });
+
+  test('nothing crosses either way while sharing is off', () async {
+    sharingOn = false;
+    clipboard.local.add(Clip(text: 'kept here'));
+    clipboard.local.add(Clip(text: 'sent on purpose', manual: true));
+    link.incoming.add(Clip(text: 'from the PC'));
+    await settle();
+    expect(link.sent, isEmpty);
+    expect(clipboard.written, isEmpty);
+    expect(sentSigns, isEmpty);
   });
 
   test('empty or oversized copies stay put', () async {

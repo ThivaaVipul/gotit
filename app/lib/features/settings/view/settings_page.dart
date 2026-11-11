@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:gotit/app/services.dart';
 import 'package:gotit/app/theme/gotit_colors.dart';
+import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/state/settings.dart';
 
 /// Settings: the paired device and Forget on both; on the PC also its name
-/// and starting with Windows.
+/// and starting with Windows; on the phone the quick settings tile.
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.services, super.key});
 
@@ -38,6 +39,7 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
             ],
+            if (services.phoneSetup case final setup?) _TileOffer(setup: setup),
             if (services.isPc) ...[
               const _Section('This PC'),
               Card(
@@ -209,6 +211,40 @@ class _StartWithWindows extends StatelessWidget {
                 ),
               );
             },
+    );
+  }
+}
+
+/// The quick settings tile, on phones whose Android can offer to add it
+/// (Android 13 and later).
+class _TileOffer extends StatelessWidget {
+  const _TileOffer({required this.setup});
+
+  final PhoneSetup setup;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<SetupStatus>(
+      future: setup.status(),
+      builder: (context, status) {
+        if (status.data?.tileSupported != true) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Section('This phone'),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                title: const Text('Quick settings tile'),
+                trailing: TextButton(
+                  onPressed: () => unawaited(setup.addTile()),
+                  child: const Text('Add'),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

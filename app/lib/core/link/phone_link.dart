@@ -13,6 +13,7 @@ import 'package:gotit/core/link/pc_link.dart' show Connection;
 import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/protocol.dart';
 import 'package:gotit/core/link/session.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 
 export 'package:gotit/core/link/pc_link.dart' show Connection;
 
@@ -113,7 +114,7 @@ class PhoneLinkState {
 
 /// The phone's side of the link: it pairs with a PC, then keeps a session
 /// with it open while it is running.
-class PhoneLink implements ClipLink {
+class PhoneLink implements ClipLink, SharingLink {
   PhoneLink({
     required this.identity,
     required this.name,
@@ -159,6 +160,7 @@ class PhoneLink implements ClipLink {
 
   final _states = StreamController<PhoneLinkState>.broadcast();
   final _clips = StreamController<Clip>.broadcast();
+  final _sharing = StreamController<SharingState>.broadcast();
   PhoneLinkState _state;
   LinkSession? _session;
   bool _running = false;
@@ -169,6 +171,25 @@ class PhoneLink implements ClipLink {
 
   @override
   Stream<Clip> get clips => _clips.stream;
+
+  @override
+  Stream<SharingState> get sharingChanges => _sharing.stream;
+
+  @override
+  bool get linked => _state.connection == Connection.online;
+
+  @override
+  Stream<bool> get linkedChanges =>
+      states.map((state) => state.connection == Connection.online).distinct();
+
+  /// Sends the sharing switch to the PC, when they are linked.
+  @override
+  bool sendSharing(SharingState sharing) {
+    final session = _session;
+    if (session == null || !linked) return false;
+    session.send(sharing.toFrame());
+    return true;
+  }
 
   /// Sends [clip] to the PC, when it is linked with the same link version.
   @override
@@ -437,6 +458,9 @@ class PhoneLink implements ClipLink {
           if (clip != null && _state.connection == Connection.online) {
             _clips.add(clip);
           }
+        case Frames.sharing:
+          final sharing = SharingState.fromFrame(frame);
+          if (sharing != null && linked) _sharing.add(sharing);
         case Frames.bye:
           // The PC forgot this pairing.
           _running = false;

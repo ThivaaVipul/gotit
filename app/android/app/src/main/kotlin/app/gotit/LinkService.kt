@@ -60,14 +60,16 @@ class LinkService : Service() {
         val running: Boolean get() = instance != null
         private var title = "Gotit"
         private var text: String? = null
+        private var sharingOn = true
 
         /**
          * Shows or updates the notification. False when Android won't let the
          * service start from the background (the battery exemption allows it).
          */
-        fun show(context: Context, newTitle: String, newText: String?): Boolean {
+        fun show(context: Context, newTitle: String, newText: String?, sharing: Boolean = true): Boolean {
             title = newTitle
             text = newText
+            sharingOn = sharing
             instance?.let {
                 it.refresh()
                 return true
@@ -127,13 +129,15 @@ class LinkService : Service() {
                 .setOnlyAlertOnce(true)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setContentIntent(open)
-                .addAction(
-                    Notification.Action.Builder(
-                        Icon.createWithResource(context, R.drawable.ic_stat_gotit),
-                        "Send",
-                        send,
-                    ).build(),
-                )
+                .apply {
+                    // Send and Turn off while sharing; only Turn on while it is off.
+                    if (sharingOn) {
+                        addAction(action(context, "Send", send))
+                        addAction(action(context, "Turn off", turn(context, on = false)))
+                    } else {
+                        addAction(action(context, "Turn on", turn(context, on = true)))
+                    }
+                }
                 .apply {
                     if (Build.VERSION.SDK_INT >= 31) {
                         setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
@@ -141,5 +145,17 @@ class LinkService : Service() {
                 }
                 .build()
         }
+
+        private fun action(context: Context, label: String, intent: PendingIntent) =
+            Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_stat_gotit), label, intent)
+                .build()
+
+        /** Turns sharing on or off, for both devices. */
+        private fun turn(context: Context, on: Boolean): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            if (on) 3 else 2,
+            Intent(context, SharingReceiver::class.java).putExtra(SharingReceiver.ON, on),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 }

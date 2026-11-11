@@ -152,6 +152,13 @@ class _ChecklistView extends StatelessWidget {
                     onTap: () => unawaited(cubit.mark('locked')),
                   ),
                 ],
+                if (status.tileSupported)
+                  SetupStep(
+                    label: 'Quick settings tile',
+                    done: status.tile,
+                    action: 'Add',
+                    onTap: () => unawaited(cubit.addTile()),
+                  ),
               ];
         final show = steps.any((step) => !step.done);
         return AnimatedSize(

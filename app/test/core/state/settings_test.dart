@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/settings.dart';
 
 void main() {
@@ -27,6 +28,18 @@ void main() {
     expect(again.value.pcName, 'Desk PC');
     expect(again.value.startWithWindows, isFalse);
     expect(File('${file.path}.tmp').existsSync(), isFalse);
+  });
+
+  test('keeps the sharing switch', () async {
+    final off = SharingState(
+      on: false,
+      changedAt: DateTime(2026, 11, 11, 9),
+      by: 'phone',
+    );
+    final store = await SettingsStore.open(file);
+    await store.save(store.value.copyWith(sharing: () => off));
+    final again = await SettingsStore.open(file);
+    expect(again.value.sharing, off);
   });
 
   test('a damaged file gives the defaults', () async {

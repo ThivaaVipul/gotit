@@ -33,6 +33,8 @@ class SetupStatus {
     this.autostart = false,
     this.autostartOpened = false,
     this.locked = false,
+    this.tileSupported = false,
+    this.tile = false,
     this.maker = '',
   });
 
@@ -59,6 +61,11 @@ class SetupStatus {
   /// Gotit locked in MIUI's recents, which only you can tell.
   final bool locked;
 
+  /// Android 13 and later can offer to add the quick settings tile, and
+  /// whether it was added or the offer answered.
+  final bool tileSupported;
+  final bool tile;
+
   /// The phone's maker, for steps only some makers need.
   final String maker;
 
@@ -67,7 +74,8 @@ class SetupStatus {
       notifications &&
       battery &&
       watcher == WatcherState.on &&
-      (!xiaomi || (autostart && locked));
+      (!xiaomi || (autostart && locked)) &&
+      (!tileSupported || tile);
 
   bool get xiaomi {
     final m = maker.toLowerCase();
@@ -98,6 +106,10 @@ abstract interface class PhoneSetup {
   /// A step only you can tell is done: `autostart` or `locked`.
   Future<void> mark(String step);
 
+  /// Android's prompt to add the quick settings tile. Completes once it was
+  /// answered.
+  Future<void> addTile();
+
   /// The copy watcher started or stopped.
   Stream<WatcherState> get watcherChanges;
 }
@@ -126,6 +138,8 @@ class ChannelPhoneSetup implements PhoneSetup {
       autostart: map['autostart'] == true,
       autostartOpened: map['autostartOpened'] == true,
       locked: map['locked'] == true,
+      tileSupported: map['tileSupported'] == true,
+      tile: map['tile'] == true,
       maker: map['maker'] as String? ?? '',
     );
   }
@@ -151,14 +165,18 @@ class ChannelPhoneSetup implements PhoneSetup {
       _setup.invokeMethod<void>('mark', {'step': step});
 
   @override
+  Future<void> addTile() => _setup.invokeMethod<void>('tile');
+
+  @override
   Stream<WatcherState> get watcherChanges => _watcher.stream;
 }
 
 /// The phone's ongoing notification, which also keeps the link running.
 abstract interface class LinkNotice {
-  /// Shows or updates it. False when Android won't start it from the
-  /// background (the battery step allows that).
-  Future<bool> show(String title, {String? text});
+  /// Shows or updates it, with Send and Turn off while [sharing], or Turn
+  /// on while not. False when Android won't start it from the background
+  /// (the battery step allows that).
+  Future<bool> show(String title, {String? text, bool sharing = true});
 
   Future<void> hide();
 }
@@ -169,11 +187,12 @@ class ChannelLinkNotice implements LinkNotice {
   static const _channel = MethodChannel('app.gotit/service');
 
   @override
-  Future<bool> show(String title, {String? text}) async {
+  Future<bool> show(String title, {String? text, bool sharing = true}) async {
     try {
       return await _channel.invokeMethod<bool>('show', {
             'title': title,
             'text': text,
+            'sharing': sharing,
           }) ??
           false;
     } on PlatformException {
