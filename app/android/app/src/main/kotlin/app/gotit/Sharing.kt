@@ -13,6 +13,7 @@ object Sharing {
     private const val PREFS = "sharing"
     private const val ON = "on"
     private const val PAIRED = "paired"
+    private const val SCREENSHOTS = "screenshots"
 
     @Volatile
     var on = true
@@ -21,6 +22,11 @@ object Sharing {
     /** There is a PC to share with: the tile is unavailable until then. */
     @Volatile
     var paired = false
+        private set
+
+    /** New screenshots go to the PC (a Settings switch, on unless turned off). */
+    @Volatile
+    var screenshots = true
         private set
 
     private var loaded = false
@@ -33,17 +39,20 @@ object Sharing {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         on = prefs.getBoolean(ON, true)
         paired = prefs.getBoolean(PAIRED, false)
+        screenshots = prefs.getBoolean(SCREENSHOTS, true)
         loaded = true
     }
 
-    /** From Dart: the switch, and whether there is a PC to share with. */
-    fun update(context: Context, on: Boolean, paired: Boolean) {
+    /** From Dart: the switch, whether there is a PC to share with, and the screenshot switch. */
+    fun update(context: Context, on: Boolean, paired: Boolean, screenshots: Boolean) {
         this.on = on
         this.paired = paired
+        this.screenshots = screenshots
         loaded = true
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(ON, on)
             .putBoolean(PAIRED, paired)
+            .putBoolean(SCREENSHOTS, screenshots)
             .apply()
         SharingTile.refresh(context)
     }

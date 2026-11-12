@@ -66,15 +66,15 @@ class ClipBridge {
   }
 
   void _copied(Clip clip) {
-    if (!sharing() || clip.text.isEmpty || clip.tooBig) return;
+    if (!sharing() || clip.isEmpty || clip.tooBig) return;
     // Send on purpose always sends; a watched copy goes through the guard.
-    if (!clip.manual && !guard.shouldSend(clip.text)) return;
+    if (!clip.manual && !guard.shouldSend(clip.key)) return;
     if (link.sendClip(clip)) onSent?.call(clip);
   }
 
   Future<void> _arrived(Clip clip) async {
-    if (!sharing()) return;
-    guard.wrote(clip.text);
+    if (!sharing() || clip.tooBig) return;
+    guard.wrote(clip.key);
     await clipboard.write(clip);
     onArrived?.call(clip);
   }

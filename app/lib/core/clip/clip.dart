@@ -5,10 +5,11 @@ import 'package:crypto/crypto.dart';
 import 'package:gotit/core/link/frame.dart';
 import 'package:gotit/core/link/protocol.dart';
 
-/// Something copied: text for now (images come in M3).
+/// Something copied: text, or an image as PNG.
 class Clip {
   Clip({
-    required this.text,
+    this.text = '',
+    this.image,
     this.sensitive = false,
     this.manual = false,
     DateTime? at,
@@ -17,7 +18,18 @@ class Clip {
   /// Text above this many bytes stays where it was copied.
   static const maxBytes = 1024 * 1024;
 
+  /// An image above this many bytes stays where it was copied.
+  static const maxImageBytes = 25 * 1024 * 1024;
+
+  /// The text, or empty for an image.
   final String text;
+
+  /// The image as PNG, or null for text.
+  final Uint8List? image;
+
+  bool get isImage => image != null;
+
+  bool get isEmpty => isImage ? image!.isEmpty : text.isEmpty;
 
   /// A password or code: kept out of clipboard history and previews.
   final bool sensitive;
@@ -29,27 +41,38 @@ class Clip {
   /// When it was copied.
   final DateTime at;
 
-  bool get tooBig => utf8.encode(text).length > maxBytes;
+  bool get tooBig => isImage
+      ? image!.length > maxImageBytes
+      : utf8.encode(text).length > maxBytes;
+
+  /// What the echo guard compares: the text, or a digest of the image.
+  String get key => isImage ? 'image:${sha256.convert(image!)}' : text;
 
   Frame toFrame() => Frame(Frames.clip, {
-    'kind': 'text',
+    'kind': isImage ? 'image' : 'text',
     'sensitive': sensitive,
     'at': at.millisecondsSinceEpoch,
-  }, Uint8List.fromList(utf8.encode(text)));
+  }, image ?? Uint8List.fromList(utf8.encode(text)));
 
   /// The clip in [frame], or null when it isn't one this version understands.
   static Clip? fromFrame(Frame frame) {
     final body = frame.body;
-    if (frame.text('kind') != 'text' || body == null) return null;
-    try {
-      final at = frame.number('at');
-      return Clip(
-        text: utf8.decode(body),
-        sensitive: frame.fields['sensitive'] == true,
-        at: at == null ? null : DateTime.fromMillisecondsSinceEpoch(at),
-      );
-    } on FormatException {
-      return null;
+    if (body == null) return null;
+    final at = frame.number('at');
+    final when = at == null ? null : DateTime.fromMillisecondsSinceEpoch(at);
+    final sensitive = frame.fields['sensitive'] == true;
+    switch (frame.text('kind')) {
+      case 'text':
+        try {
+          return Clip(text: utf8.decode(body), sensitive: sensitive, at: when);
+        } on FormatException {
+          return null;
+        }
+      case 'image':
+        if (body.isEmpty) return null;
+        return Clip(image: body, sensitive: sensitive, at: when);
+      default:
+        return null;
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotit/core/clip/clip.dart';
@@ -343,6 +344,20 @@ void main() {
     await until(() => atPhone.isNotEmpty && atPc.isNotEmpty);
     expect(atPc.single, off);
     expect(atPhone.single, SharingState.initial);
+  });
+
+  test('an image bigger than a text frame crosses', () async {
+    await startPc(phone: link.phoneAsPeer);
+    final ph = phone(pc: link.pcAsPeer);
+    final atPc = <Clip>[];
+    link.pc.clips.listen(atPc.add);
+    ph.start();
+    await until(() => ph.linked && link.pc.linked);
+
+    final png = Uint8List(3 * 1024 * 1024)..[0] = 0x89;
+    expect(ph.sendClip(Clip(image: png)), isTrue);
+    await until(() => atPc.isNotEmpty);
+    expect(atPc.single.image, png);
   });
 
   test('copies cross both ways once linked, and not before', () async {

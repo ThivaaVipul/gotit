@@ -6,12 +6,14 @@
 #include <flutter/method_channel.h>
 #include <windows.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 // The PC's clipboard for Gotit: tells Dart about each copy (as "copied" on
-// the app.gotit/clipboard channel) and writes what the phone sends ("write").
-// Nothing read or written is kept or logged.
+// the app.gotit/clipboard channel) and writes what the phone sends ("write"):
+// text, or an image as PNG. Nothing read or written is kept or logged.
 class ClipboardBridge {
  public:
   ClipboardBridge(flutter::BinaryMessenger* messenger, HWND window);
@@ -24,10 +26,13 @@ class ClipboardBridge {
  private:
   void OnClipboardChanged();
   bool Write(const std::string& utf8, bool sensitive);
+  bool WriteImage(const std::vector<uint8_t>& png);
 
   HWND window_;
   // Marks Gotit's own writes, so they are never reported as new copies.
   UINT own_format_;
+  // Images as PNG, which browsers and Office use and which keeps alpha.
+  UINT png_format_;
   // Set by password managers: "clipboard watchers, look away".
   UINT exclude_format_;
   // A DWORD; 0 keeps a copy out of Windows clipboard history.

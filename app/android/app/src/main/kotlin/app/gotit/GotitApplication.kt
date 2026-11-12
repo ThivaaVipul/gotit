@@ -17,6 +17,8 @@ class GotitApplication : Application() {
         super.onCreate()
         // The switch as last known, before Dart has started.
         Sharing.load(this)
+        // New screenshots, once Photos access is there.
+        Screenshots.start(this)
         val engine = FlutterEngine(this)
         Channels.register(this, engine)
         engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())

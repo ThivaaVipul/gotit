@@ -5,20 +5,22 @@ import 'package:gotit/core/clip/bridge.dart';
 import 'package:gotit/core/clip/clip.dart';
 
 /// The clipboard through the platform side: the Windows runner on the PC
-/// (it listens for clipboard changes), Kotlin on the phone (the copy watcher
-/// and the notification's Send). Both report copies as `copied` and take
-/// `write`.
+/// (it listens for clipboard changes), Kotlin on the phone (the copy watcher,
+/// the notification's Send and new screenshots). Both report copies as
+/// `copied` and take `write`, with `text`, or `image` as PNG bytes.
 class ChannelClipboard implements DeviceClipboard {
   ChannelClipboard() {
     _channel.setMethodCallHandler((call) async {
       if (call.method != 'copied') return;
       final args = (call.arguments as Map<Object?, Object?>?) ?? const {};
       final text = args['text'];
-      if (text is! String || text.isEmpty) return;
+      final image = args['image'];
+      if (image is! Uint8List && (text is! String || text.isEmpty)) return;
       final at = args['at'];
       _copies.add(
         Clip(
-          text: text,
+          text: text is String ? text : '',
+          image: image is Uint8List ? image : null,
           sensitive: args['sensitive'] == true,
           manual: args['manual'] == true,
           at: at is int && at > 0
@@ -37,7 +39,7 @@ class ChannelClipboard implements DeviceClipboard {
 
   @override
   Future<void> write(Clip clip) => _channel.invokeMethod<void>('write', {
-    'text': clip.text,
+    if (clip.isImage) 'image': clip.image else 'text': clip.text,
     'sensitive': clip.sensitive,
   });
 }

@@ -329,7 +329,20 @@ Each milestone gets a short grilling of its details before code.
       - a change made on the phone while the PC was closed won when the PC came back.
 
       125 tests pass and analysis is clean.
-- [ ] **M3 Images:** copied images both ways, and new phone screenshots to the PC.
+- [x] **M3 Images:** copied images both ways, and new phone screenshots to the PC. Grilled 2026-11-11, one pull request, released as v0.8.0:
+  - **Copied images, both ways, as PNG:** PC to phone covers snips (Win+Shift+S) and "Copy image" in browsers; on the phone the image goes on the clipboard as a file link, so it pastes where apps accept images. Phone to PC: the watcher catches "Copy image" like any copy, and Send sends an image too.
+  - **Up to 25 MB:** bigger images stay where they were copied (M4 can send them as files).
+  - **Same rules as text:** nothing crosses while sharing is off or the devices are apart, and nothing bounces back.
+  - **Phone screenshots:** a new one goes onto the PC's clipboard, with the quiet "Sent to" sign. On by default: a checklist step, "Screenshots to PC", asks for Photos access, and Gotit opens only brand-new files in the Screenshots folder. A Settings switch turns it off.
+  - **Built:** image clips (PNG) in the link, whose frames now take 26 MiB, so the link version went to 2; the PC reads the clipboard's PNG or bitmap and writes both PNG and a bitmap, through Windows Imaging Component; the phone reads copied images as PNG off the main thread (skipping anything over 25 MiB or 24 million pixels, which could run it out of memory), writes images through its own read-only provider, and watches the photo library for new screenshots.
+  - **Checked on the phone and this PC on 2026-11-12** with test builds, starting from a fresh install (Gotit had been uninstalled from the phone), so pairing and the whole checklist ran again, Photos step included. All of these worked:
+    - a phone screenshot on the PC's clipboard (1080x2400), with "Sent to" on the phone;
+    - a picture copied on the PC, and a Win+Shift+S snip, pasted on the phone;
+    - "Copy image" in a phone browser caught by the watcher and on the PC's clipboard;
+    - a screenshot taken while sharing was off staying on the phone;
+    - text still crossing both ways.
+
+    One fix came out of it: a screenshot taken while off could still have crossed if sharing came back on within 20 seconds, so one taken while off is now never sent. 135 tests pass and analysis is clean.
 - [ ] **M4 Files:**
   - phone: the share sheet;
   - PC: drag onto the window, Send to and the hotkey;
@@ -401,3 +414,5 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-11: M2c2 merged (PR #9) and released as v0.6.0; both apps updated, the phone just by being opened. The update through Android's installer put "Allow restricted settings" back to denied; the watcher stayed on, and the checklist already offers App info if it is ever switched off.
 - 2026-11-11: The home screen's live ring and sweep ran forever, costing about 55% of a CPU core while the window was open. They now play when the PC connects and when the app comes back to the front, then rest, and only their own small area redraws: 0% CPU with the window open, measured on the phone.
 - 2026-11-11: M2d grilled (plain on/off, the tile offered once in the checklist), built and checked on both devices. With it, M2 is done.
+- 2026-11-11: M3 grilled: images both ways up to 25 MB, and phone screenshots to the PC, on by default.
+- 2026-11-12: M3 built and checked on both devices, from a fresh install on the phone.

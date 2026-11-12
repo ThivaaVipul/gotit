@@ -14,6 +14,7 @@ class FakeSetup implements PhoneSetup {
     this.restricted = false,
     this.maker = '',
     this.tileSupported = false,
+    this.screenshots = false,
   });
 
   bool notifications;
@@ -26,6 +27,8 @@ class FakeSetup implements PhoneSetup {
   bool locked = false;
   bool tileSupported;
   bool tile = false;
+  bool screenshots;
+  bool photos = false;
 
   final asked = <String>[];
   // Closed in tearDown.
@@ -43,6 +46,8 @@ class FakeSetup implements PhoneSetup {
     locked: locked,
     tileSupported: tileSupported,
     tile: tile,
+    screenshots: screenshots,
+    photos: photos,
     maker: maker,
   );
 
@@ -68,6 +73,12 @@ class FakeSetup implements PhoneSetup {
   Future<void> mark(String step) async {
     if (step == 'autostart') autostart = true;
     if (step == 'locked') locked = true;
+  }
+
+  @override
+  Future<void> askPhotos() async {
+    asked.add('photos');
+    photos = true;
   }
 
   @override
@@ -195,6 +206,33 @@ void main() {
     setup.watcherEvents.add(WatcherState.on);
     await tester.pumpAndSettle();
     expect(find.text('Finish setup'), findsNothing);
+  });
+
+  testWidgets('asks for Photos while screenshots go to the PC', (tester) async {
+    setup = FakeSetup(
+      notifications: true,
+      battery: true,
+      watcher: WatcherState.on,
+      screenshots: true,
+    );
+    await _show(tester, setup);
+    expect(find.text('3 of 4'), findsOneWidget);
+    expect(find.text('Screenshots to PC'), findsOneWidget);
+
+    await tester.tap(_button('Allow'));
+    // Back from Android's prompt.
+    tester.binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(setup.asked, ['photos']);
+    expect(find.text('Finish setup'), findsNothing);
+  });
+
+  testWidgets('no Photos step when screenshots are off', (tester) async {
+    setup = FakeSetup(notifications: true, battery: true);
+    await _show(tester, setup);
+    expect(find.text('Screenshots to PC'), findsNothing);
   });
 
   testWidgets('offers the quick settings tile where Android can add it', (

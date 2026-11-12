@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import android.util.Log
+import java.util.concurrent.Executors
 
 /** Why the clipboard is being read: a signal the watcher caught, or Send. */
 data class CopyTrigger(
@@ -73,10 +74,13 @@ object CopyReads {
 
     private var lastFingerprint: Int? = null
 
+    /** Images are read and turned into PNG here, off the main thread. */
+    private val images = Executors.newSingleThreadExecutor()
+
     fun report(context: Context, trigger: CopyTrigger, via: String, copy: PhoneClipboard.Copy?) {
         val after = SystemClock.uptimeMillis() - trigger.uptime
         if (trigger.manual) {
-            copy?.let { Channels.copied(it.text, it.sensitive, it.copiedAt, manual = true) }
+            copy?.let { hand(context, it, manual = true) }
             return
         }
         if (copy == null) {
@@ -91,11 +95,31 @@ object CopyReads {
             return
         }
         // One copy can fire several signals.
-        val fingerprint = 31 * copy.text.hashCode() + copy.copiedAt.hashCode()
+        val fingerprint = 31 * (copy.text ?: copy.image).hashCode() + copy.copiedAt.hashCode()
         if (fingerprint == lastFingerprint) return
         lastFingerprint = fingerprint
         if (trigger.kind == CopyTrigger.GONE) WatchedApps.needsCheck(context, trigger.app)
-        Log.d(TAG, "watch: ${trigger.kind}, caught via $via after ${after}ms, ${copy.text.length} chars")
-        Channels.copied(copy.text, copy.sensitive, copy.copiedAt, manual = false)
+        val what = copy.text?.let { "${it.length} chars" } ?: "an image"
+        Log.d(TAG, "watch: ${trigger.kind}, caught via $via after ${after}ms, $what")
+        hand(context, copy, manual = false)
+    }
+
+    /** To Dart: text at once, an image once read as PNG. */
+    private fun hand(context: Context, copy: PhoneClipboard.Copy, manual: Boolean) {
+        val text = copy.text
+        if (text != null) {
+            Channels.copied(text, copy.sensitive, copy.copiedAt, manual)
+            return
+        }
+        val uri = copy.image ?: return
+        val app = context.applicationContext
+        images.execute {
+            val png = PhoneClipboard.toPng(app, uri)
+            if (png == null) {
+                Log.d(TAG, "image: unreadable or too big")
+            } else {
+                Channels.copiedImage(png, copy.copiedAt, manual)
+            }
+        }
     }
 }

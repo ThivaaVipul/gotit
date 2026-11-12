@@ -134,7 +134,11 @@ Future<void> main(List<String> args) async {
     final phoneSharing = sharingOver(phoneLink);
     sharing = phoneSharing;
     // The tile, the notification's buttons and the copy watcher follow it.
-    PhoneSharingControls(sharing: phoneSharing, link: phoneLink).start();
+    PhoneSharingControls(
+      sharing: phoneSharing,
+      link: phoneLink,
+      settings: settings,
+    ).start();
     unawaited(_startLooking(pcFinder, phoneLink));
     // The ongoing notification keeps the link running while paired, and
     // says "Sent to <PC>" after a copy crossed.

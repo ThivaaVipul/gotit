@@ -97,11 +97,17 @@ object Channels {
                 when (call.method) {
                     "write" -> {
                         val text = call.argument<String>("text")
-                        if (text == null) {
-                            result.error("args", "No text", null)
-                        } else {
-                            PhoneClipboard.write(app, text, call.argument<Boolean>("sensitive") == true)
-                            result.success(null)
+                        val image = call.argument<ByteArray>("image")
+                        when {
+                            image != null -> {
+                                PhoneClipboard.writeImage(app, image)
+                                result.success(null)
+                            }
+                            text != null -> {
+                                PhoneClipboard.write(app, text, call.argument<Boolean>("sensitive") == true)
+                                result.success(null)
+                            }
+                            else -> result.error("args", "No text or image", null)
                         }
                     }
                     else -> result.notImplemented()
@@ -144,6 +150,7 @@ object Channels {
                             app,
                             on = call.argument<Boolean>("on") ?: true,
                             paired = call.argument<Boolean>("paired") ?: false,
+                            screenshots = call.argument<Boolean>("screenshots") ?: true,
                         )
                         result.success(null)
                     }
@@ -181,6 +188,8 @@ object Channels {
                     // Android 13 and later can offer to add the tile.
                     "tileSupported" to (Build.VERSION.SDK_INT >= 33),
                     "tile" to (prefs.getBoolean(TILE_ADDED, false) || prefs.getBoolean(TILE_ASKED, false)),
+                    "screenshots" to Sharing.screenshots,
+                    "photos" to Screenshots.allowed(app),
                     "maker" to Build.MANUFACTURER,
                 ),
             )
@@ -276,6 +285,16 @@ object Channels {
             context.startActivity(page.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: RuntimeException) {
             context.startActivity(fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    /** An image copied here, or a new screenshot, as PNG. Any thread. */
+    fun copiedImage(png: ByteArray, copiedAt: Long, manual: Boolean) {
+        main.post {
+            clipboard?.invokeMethod(
+                "copied",
+                mapOf("image" to png, "at" to copiedAt, "manual" to manual),
+            )
         }
     }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotit/core/clip/bridge.dart';
@@ -7,6 +8,7 @@ import 'package:gotit/core/clip/clip.dart';
 class FakeLink implements ClipLink {
   bool online = true;
   final sent = <String>[];
+  final sentClips = <Clip>[];
   // Closed in tearDown.
   // ignore: close_sinks
   final incoming = StreamController<Clip>.broadcast();
@@ -15,6 +17,7 @@ class FakeLink implements ClipLink {
   bool sendClip(Clip clip) {
     if (!online) return false;
     sent.add(clip.text);
+    sentClips.add(clip);
     return true;
   }
 
@@ -109,6 +112,32 @@ void main() {
     expect(link.sent, isEmpty);
     expect(clipboard.written, isEmpty);
     expect(sentSigns, isEmpty);
+  });
+
+  test(
+    'an image crosses, and the same one coming back is not echoed',
+    () async {
+      final png = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47, 9, 9]);
+      clipboard.local.add(Clip(image: png));
+      await settle();
+      expect(link.sentClips.single.image, png);
+
+      link.incoming.add(Clip(image: Uint8List.fromList([7, 7, 7])));
+      await settle();
+      expect(clipboard.written.single.isImage, isTrue);
+      // The phone's watcher reports the written image as a copy.
+      clipboard.local.add(Clip(image: Uint8List.fromList([7, 7, 7])));
+      await settle();
+      expect(link.sentClips, hasLength(1));
+    },
+  );
+
+  test('an image over the limit stays put either way', () async {
+    clipboard.local.add(Clip(image: Uint8List(Clip.maxImageBytes + 1)));
+    link.incoming.add(Clip(image: Uint8List(Clip.maxImageBytes + 1)));
+    await settle();
+    expect(link.sentClips, isEmpty);
+    expect(clipboard.written, isEmpty);
   });
 
   test('empty or oversized copies stay put', () async {
