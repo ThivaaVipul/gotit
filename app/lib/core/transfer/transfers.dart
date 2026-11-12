@@ -31,6 +31,20 @@ abstract interface class OutgoingFile {
   Stream<List<int>> read();
 }
 
+/// A file made just before it is sent: a folder, zipped.
+abstract interface class PreparedFile implements OutgoingFile {
+  /// Makes it, after which [size] and [read] work. Throws when it can't be
+  /// made, or when [stop] stopped it.
+  Future<void> prepare();
+
+  /// Stops a [prepare] under way.
+  void stop();
+
+  /// Removes what [prepare] made. Safe before, without or after [prepare],
+  /// and more than once.
+  Future<void> dispose();
+}
+
 /// Where arriving files are kept.
 abstract interface class FileStore {
   /// Starts a file to be called [name], which is already safe to use.
@@ -143,6 +157,7 @@ class Transfer {
     this.bytes = 0,
     this.status = TransferStatus.running,
     this.location,
+    this.preparing = false,
   });
 
   final String id;
@@ -158,6 +173,9 @@ class Transfer {
 
   /// Where a received file was kept.
   final String? location;
+
+  /// Still being made (a folder being zipped), before anything is sent.
+  final bool preparing;
 
   /// From 0 to 1, or null while the size is unknown.
   double? get progress => size > 0 ? (bytes / size).clamp(0.0, 1.0) : null;
@@ -177,6 +195,7 @@ class Transfer {
     bytes: bytes ?? this.bytes,
     status: status ?? this.status,
     location: location ?? this.location,
+    preparing: preparing,
   );
 }
 
@@ -217,6 +236,7 @@ class Transfers extends ValueNotifier<List<Transfer>> {
   final _incoming = <String, _Incoming>{};
   final _batches = <String, List<ReceivedFile>>{};
   final _stopped = <String>{};
+  final _preparing = <String, PreparedFile>{};
   final _shownAt = <String, DateTime>{};
   final _clearing = <Timer>[];
   StreamSubscription<bool>? _linkWatch;
@@ -250,8 +270,9 @@ class Transfers extends ValueNotifier<List<Transfer>> {
   void cancel(String id) {
     final incoming = _incoming.remove(id);
     if (incoming == null) {
-      // One being sent stops at its next piece.
+      // One being made stops now; one being sent stops at its next piece.
       _stopped.add(id);
+      _preparing[id]?.stop();
       return;
     }
     unawaited(incoming.file.discard());
@@ -265,21 +286,115 @@ class Transfers extends ValueNotifier<List<Transfer>> {
   Future<SendResult> _sendAll(List<OutgoingFile> files) async {
     if (files.isEmpty) return SendResult.sent;
     if (!link.linked) return SendResult.away;
-    final batch = _newId();
-    for (var i = 0; i < files.length; i++) {
-      final result = await _sendOne(files[i], batch, i, files.length);
-      if (result != SendResult.sent) return result;
+    // Files that are made first (folders, zipped) are all made before the
+    // first file goes, so a batch never stops halfway for one that couldn't
+    // be made. Each keeps its row from then on.
+    final ids = <int, String>{};
+    final made = <PreparedFile>[];
+    try {
+      for (var i = 0; i < files.length; i++) {
+        final file = files[i];
+        if (file is! PreparedFile) continue;
+        made.add(file);
+        final id = ids[i] = _newId();
+        final result = await _prepare(file, id);
+        if (result != SendResult.sent) {
+          _abandon(ids.values, result);
+          return result;
+        }
+      }
+      if (!link.linked) {
+        _abandon(ids.values, SendResult.away);
+        return SendResult.away;
+      }
+      final batch = _newId();
+      for (var i = 0; i < files.length; i++) {
+        final result = await _sendOne(
+          files[i],
+          batch,
+          i,
+          files.length,
+          id: ids[i],
+        );
+        if (result != SendResult.sent) {
+          _abandon(ids.values, result);
+          return result;
+        }
+      }
+      return SendResult.sent;
+    } finally {
+      for (final file in made) {
+        try {
+          await file.dispose();
+        } on Object {
+          // Left for the next start to clear.
+        }
+      }
     }
+  }
+
+  /// Makes [file], showing it as being made; [SendResult.sent] once made.
+  Future<SendResult> _prepare(PreparedFile file, String id) async {
+    _put(
+      Transfer(
+        id: id,
+        name: file.name,
+        size: -1,
+        direction: TransferDirection.sending,
+        preparing: true,
+      ),
+    );
+    _preparing[id] = file;
+    try {
+      await file.prepare();
+    } on Object {
+      if (_stopped.remove(id)) return _endEarly(id, TransferStatus.cancelled);
+      return _endEarly(id, TransferStatus.failed);
+    } finally {
+      _preparing.remove(id);
+    }
+    if (_stopped.remove(id)) return _endEarly(id, TransferStatus.cancelled);
+    // Made: waiting its turn, now with its size.
+    _put(
+      Transfer(
+        id: id,
+        name: file.name,
+        size: file.size,
+        direction: TransferDirection.sending,
+      ),
+    );
     return SendResult.sent;
+  }
+
+  SendResult _endEarly(String id, TransferStatus status) {
+    _end(id, status);
+    return status == TransferStatus.cancelled
+        ? SendResult.cancelled
+        : SendResult.failed;
+  }
+
+  /// A batch stopped early: rows still waiting their turn end too.
+  void _abandon(Iterable<String> ids, SendResult why) {
+    for (final id in ids) {
+      if (_find(id)?.running ?? false) {
+        _end(
+          id,
+          why == SendResult.cancelled
+              ? TransferStatus.cancelled
+              : TransferStatus.failed,
+        );
+      }
+    }
   }
 
   Future<SendResult> _sendOne(
     OutgoingFile file,
     String batch,
     int index,
-    int count,
-  ) async {
-    final id = _newId();
+    int count, {
+    String? id,
+  }) async {
+    id ??= _newId();
     _put(
       Transfer(
         id: id,
@@ -491,6 +606,12 @@ class Transfers extends ValueNotifier<List<Transfer>> {
       await incoming.file.discard();
       _end(id, TransferStatus.failed);
       _batchEnded(incoming);
+    }
+    // A batch lost between two of its files: hand over what arrived.
+    final waiting = List.of(_batches.values);
+    _batches.clear();
+    for (final files in waiting) {
+      if (files.isNotEmpty) onBatch?.call(List.unmodifiable(files));
     }
   }
 

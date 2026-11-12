@@ -173,6 +173,35 @@ void main() {
     files.dispose();
   });
 
+  test('a file arriving shows its progress and Cancel', () async {
+    final files = ValueNotifier<List<Transfer>>(const []);
+    final kept = NoticeKeeper(
+      states: states.stream,
+      current: () => current,
+      notice: notice,
+      transfers: files,
+    )..start();
+    await change(const PhoneLinkState(pc: _pc, connection: Connection.online));
+
+    const receiving = Transfer(
+      id: 't2',
+      name: 'slides.pdf',
+      size: 400,
+      direction: TransferDirection.receiving,
+      bytes: 100,
+    );
+    files.value = [receiving];
+    expect(notice.shown.last, ('Receiving from Desk PC', 'slides.pdf'));
+    expect(notice.progress.last, (25, 't2'));
+
+    files.value = [receiving.copyWith(status: TransferStatus.done, bytes: 400)];
+    expect(notice.shown.last, ('Connected to Desk PC', null));
+    expect(notice.progress.last, (null, null));
+
+    await kept.stop();
+    files.dispose();
+  });
+
   test('does not repeat itself', () async {
     keeper.start();
     await change(const PhoneLinkState(pc: _pc, connection: Connection.online));

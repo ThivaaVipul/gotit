@@ -11,7 +11,7 @@ class TransfersCard extends StatelessWidget {
 
   final Transfers transfers;
 
-  /// Opens a received file (the PC only).
+  /// Opens a received file.
   final void Function(String location)? onOpen;
 
   @override
@@ -94,7 +94,12 @@ class _TransferRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
-                if (status == null)
+                if (transfer.preparing && transfer.running)
+                  Text(
+                    'Zipping',
+                    style: text.bodySmall?.copyWith(color: colors.muted),
+                  )
+                else if (status == null)
                   TweenAnimationBuilder<double>(
                     tween: Tween(end: transfer.progress ?? 0),
                     duration: motion.tick,

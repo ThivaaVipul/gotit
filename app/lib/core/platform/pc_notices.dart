@@ -6,7 +6,7 @@ import 'package:gotit/core/transfer/transfers.dart';
 import 'package:local_notifier/local_notifier.dart';
 
 /// The PC's toasts: files from the phone have arrived, with Open and Show in
-/// folder.
+/// folder; and how a send from the tray (Send to, Ctrl+F2) is going.
 ///
 /// Windows shows a desktop app's toasts only through a Start menu shortcut
 /// carrying its app ID. The installer's shortcut carries "Gotit", the name
@@ -31,6 +31,16 @@ class PcNotices {
       _ready = true;
     } on Object {
       // No toasts; the files still arrive and go on the clipboard.
+    }
+  }
+
+  /// A short toast, with no buttons.
+  Future<void> say(String title, {String? body}) async {
+    if (!_ready) return;
+    try {
+      await LocalNotification(title: title, body: body).show();
+    } on Object {
+      // A toast that can't show changes nothing else.
     }
   }
 

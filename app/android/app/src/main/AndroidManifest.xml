@@ -101,6 +101,15 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
+        <!-- A file notice's Open, Open folder and Share. Invisible; it opens
+             what was asked, then closes. -->
+        <activity
+            android:name=".FileActionActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity="app.gotit.files"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- The notification's Cancel, for a file on its way. -->
         <receiver
             android:name=".CancelReceiver"

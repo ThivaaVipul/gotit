@@ -50,6 +50,8 @@ Source: "..\app\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ig
 ; matches the app name the toasts are set up with (local_notifier uses it as
 ; the shortcut's name and its ID alike).
 Name: "{autoprograms}\Gotit"; Filename: "{app}\gotit.exe"; AppUserModelID: "Gotit"
+; Explorer's Send to > Gotit: Explorer adds the chosen files after --send.
+Name: "{usersendto}\Gotit"; Filename: "{app}\gotit.exe"; Parameters: "--send"
 
 [Registry]
 ; Gotit adds itself to the per-user Run key when "Start with Windows" is on.

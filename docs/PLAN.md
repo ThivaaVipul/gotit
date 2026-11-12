@@ -343,14 +343,14 @@ Each milestone gets a short grilling of its details before code.
     - text still crossing both ways.
 
     One fix came out of it: a screenshot taken while off could still have crossed if sharing came back on within 20 seconds, so one taken while off is now never sent. 135 tests pass and analysis is clean.
-- [ ] **M4 Files:**
+- [x] **M4 Files:**
   - phone: the share sheet;
   - PC: drag onto the window, Send to and the hotkey;
   - the `Downloads\Gotit` and `Download/Gotit` folders, progress, and sent images also on the clipboard.
 
   Grilled 2026-11-12:
   - **Phone:** Share > Gotit takes files, and links or text too (text lands on the PC's clipboard like a copy).
-  - **PC:** drag onto the window (folders zipped), Explorer's Send to > Gotit, or Ctrl+C the files in Explorer and press **Ctrl+Alt+G**.
+  - **PC:** drag onto the window (folders zipped), Explorer's Send to > Gotit, or Ctrl+C the files in Explorer and press **Ctrl+F2**. (Ctrl+Alt+G was picked first, but another app on this PC already held it, so you chose Ctrl+F2 while testing M4b.)
   - **The other device away:** said at once ("<name> isn't connected") and nothing waits; a cold start gets a few seconds to link first. Sharing off offers "Turn on and send".
   - **Arriving on the PC:** `Downloads\Gotit`, an Open toast, and on the clipboard as files ready for Ctrl+V (an image also as a picture).
   - **Arriving on the phone:** `Download/Gotit`, a notice with Open and Share, and an image also on the clipboard.
@@ -370,7 +370,24 @@ Each milestone gets a short grilling of its details before code.
       - "Turn on and send" while sharing was off, and "<PC> isn't connected" with the PC closed.
 
       Found and fixed: the phone said nothing when files started on their way (the notification was easy to miss, so the same photos were shared three times), so it now shows "Sending 2 files to <PC>"; a toast for several files had two buttons doing the same thing; and the phone now reads the next piece while one is sent. Windows kept the toasts in the notification centre without popping them up, which is Windows' Do not disturb rather than Gotit. 153 tests pass and analysis is clean.
-  - **M4b, PC to phone (v0.10.0):** drag and drop (`desktop_drop` 0.8.4), Send to (the installer's SendTo shortcut), Ctrl+Alt+G (`RegisterHotKey` and the copied file list in the runner), folders zipped (`archive`); phone saving to `Download/Gotit` through MediaStore, its notice with Open and Share, and images on the clipboard.
+  - **M4b, PC to phone (v0.10.0):**
+    - **Three ways in, one sender:**
+      - dropping on the window: the runner takes the drop itself (an OLE drop target), so no `desktop_drop`, which would also put a drag listener into the phone app; home gets the look's dashed "Drop files here to send", lit while files hover;
+      - Send to: the installer adds a Gotit shortcut to the user's Send to folder, running `gotit.exe --send` with the files; a Gotit already running takes them over from the second launch (a long list through a temporary file), and a closed one starts in the tray and sends;
+      - Ctrl+F2: `RegisterHotKey` in the runner sends the files copied in Explorer (`CF_HDROP`); with none copied, a toast says so, and if another app holds Ctrl+F2 the drop area says that instead of naming it.
+    - **Folders** are zipped first with `archive` (photos, videos and archives stored as they are, the rest compressed) into a temporary folder that is removed afterwards; the row reads "Zipping" and can be cancelled. Everything in a batch is made before the first file goes, so a batch never stops halfway for a folder.
+    - **Answers:** the phone away is said at once (a cold start from Send to waits up to 6 seconds for the link); sharing off brings the window up asking "Turn on and send"; sends from the tray get a toast as they start, and the tray's check when they arrive. Progress and Cancel are in the window's transfers.
+    - **Phone:** files written straight into `Download/Gotit` through MediaStore, hidden until whole and deleted if not, under the name MediaStore gives a clash ("name (1).ext"); progress and Cancel in the ongoing notification; then a notice from the PC with Open and Share (Open folder for several), and an image also on the clipboard. Open on the home screen's transfers works on the phone too.
+    - **The link** stays at version 3: the frames are the same both ways. A file batch the link loses between two files still hands over what arrived.
+    - **Checked on the phone and this PC on 2026-11-12** with test builds. All of these worked:
+      - Send to from Explorer's menu, and from a closed Gotit, which started in the tray and sent within about 2 seconds;
+      - Ctrl+F2 with a file and a folder copied: one batch, and a zip with the folder on top, its empty subfolder kept, photos stored and text compressed;
+      - dropping on the window, the drop area lighting up; a 150 MB file with progress on both devices, cancelled from the phone, leaving nothing behind;
+      - clashing names arriving as "(1)" and "(2)";
+      - with sharing off, the window asking, and "Turn on and send" sending;
+      - the phone's notice: Open (the gallery for a photo, a choice of apps for text), Open folder (the Files app), Share, and the photo pasting on the phone.
+
+      Found and changed: another app on this PC already held Ctrl+Alt+G, so the hotkey is Ctrl+F2 (your pick), and the drop area says when another app holds it. 180 tests pass and analysis is clean.
 - [ ] **M5 Recent list and polish:**
   - the recent list on both sides;
   - the Open button for links;
@@ -441,3 +458,5 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-11: M3 grilled: images both ways up to 25 MB, and phone screenshots to the PC, on by default.
 - 2026-11-12: M3 built and checked on both devices, from a fresh install on the phone.
 - 2026-11-12: M4 grilled (hotkey Ctrl+Alt+G, nothing waits for a device that is away, shared text too, files on the PC clipboard) and split in two; M4a (phone to PC) built and checked on both devices.
+- 2026-11-12: M4a merged (PR #13) and released as v0.9.0; both apps updated.
+- 2026-11-12: M4b (PC to phone) built and checked on both devices. Ctrl+Alt+G was taken by another app on this PC, so the hotkey became Ctrl+F2. Window drops are taken by the runner itself rather than `desktop_drop`, which would also have added a drag listener to the phone app. With it, M4 is done.

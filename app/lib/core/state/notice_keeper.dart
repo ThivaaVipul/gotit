@@ -9,7 +9,8 @@ import 'package:gotit/core/transfer/transfers.dart';
 /// Keeps the phone's ongoing notification in step with the link: there while
 /// paired, saying how the link stands, "Sent to" the PC for a while after a
 /// copy crossed, when MIUI has stopped the copy watcher, and "Sharing off"
-/// with Turn on while the switch is off. It changes quietly, with no sound.
+/// with Turn on while the switch is off. A file on its way, either way, takes
+/// it over with its progress and Cancel. It changes quietly, with no sound.
 class NoticeKeeper {
   NoticeKeeper({
     required this.states,
@@ -32,7 +33,8 @@ class NoticeKeeper {
   /// The sharing switch.
   final ValueListenable<SharingState>? sharing;
 
-  /// Files on their way: one being sent shows its progress and Cancel.
+  /// Files on their way: one being sent or received shows its progress and
+  /// Cancel.
   final ValueListenable<List<Transfer>>? transfers;
   final Duration sentFor;
 
@@ -118,24 +120,24 @@ class NoticeKeeper {
             WatcherState.turnedOff => 'Copy watching is off',
             _ => null,
           };
-    // A file on its way takes the notification over: its name, its
-    // progress, and Cancel.
-    Transfer? sending;
+    // A file on its way, either way, takes the notification over: its name,
+    // its progress, and Cancel.
+    Transfer? moving;
     for (final transfer in transfers?.value ?? const <Transfer>[]) {
-      if (transfer.running && transfer.direction == TransferDirection.sending) {
-        sending = transfer;
-      }
+      if (transfer.running) moving = transfer;
     }
-    if (sending != null && state.connection == Connection.online) {
-      final percent = sending.progress == null
+    if (moving != null && state.connection == Connection.online) {
+      final percent = moving.progress == null
           ? null
-          : (sending.progress! * 100).round();
+          : (moving.progress! * 100).round();
       final next = (
-        'Sending to ${pc.name}',
-        sending.name,
+        moving.direction == TransferDirection.sending
+            ? 'Sending to ${pc.name}'
+            : 'Receiving from ${pc.name}',
+        moving.name,
         on,
         percent,
-        sending.id,
+        moving.id,
       );
       if (next == _shown) return;
       _shown = next;
@@ -145,7 +147,7 @@ class NoticeKeeper {
           text: next.$2,
           sharing: on,
           percent: percent,
-          cancel: sending.id,
+          cancel: moving.id,
         ),
       );
       return;

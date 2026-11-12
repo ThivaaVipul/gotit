@@ -1,6 +1,8 @@
+import 'package:flutter/widgets.dart';
 import 'package:gotit/core/link/discovery.dart';
 import 'package:gotit/core/link/pc_link.dart';
 import 'package:gotit/core/link/phone_link.dart';
+import 'package:gotit/core/platform/pc_files.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
 import 'package:gotit/core/sharing/sharing.dart';
@@ -23,6 +25,8 @@ class AppServices {
     this.phoneSetup,
     this.sharing,
     this.transfers,
+    this.pcFiles,
+    this.navigator,
   });
 
   final String version;
@@ -56,6 +60,12 @@ class AppServices {
 
   /// Files on their way, either way.
   final Transfers? transfers;
+
+  /// Files dropped on the window, and Ctrl+F2 (the PC only).
+  final PcFiles? pcFiles;
+
+  /// The app's navigator, for asking from outside a screen (the PC only).
+  final GlobalKey<NavigatorState>? navigator;
 
   /// The PC's name as the phone shows it.
   String get pcName => effectivePcName(settings.value, windowsName);

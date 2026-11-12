@@ -124,6 +124,15 @@ object PhoneClipboard {
         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
     }
 
+    /**
+     * A file from the PC, already in Download/Gotit (an image): on the
+     * clipboard as a link to it, which apps accepting pasted images can read.
+     */
+    fun writeUri(context: Context, uri: Uri) {
+        val clip = ClipData.newUri(context.contentResolver, LABEL, uri)
+        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    }
+
     private fun isPng(bytes: ByteArray) = bytes.size > 8 &&
         bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() &&
         bytes[2] == 'N'.code.toByte() && bytes[3] == 'G'.code.toByte()
