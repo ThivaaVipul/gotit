@@ -24,6 +24,7 @@ class GotitApp extends StatelessWidget {
     final phoneLink = services.phoneLink;
     final app = MaterialApp(
       title: 'Gotit',
+      navigatorKey: services.navigator,
       debugShowCheckedModeBanner: false,
       theme: gotitTheme(Brightness.light),
       darkTheme: gotitTheme(Brightness.dark),

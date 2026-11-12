@@ -14,9 +14,10 @@ One Flutter app, built for Android and Windows. Most of the code is shared Dart;
  |   shared Dart: link, clips,      |  same    |   shared Dart: link, clips,      |
  |   files, switch, recent list     |  Wi-Fi   |   files, switch, recent list     |
  | Kotlin: copy watcher, clipboard  |          | C++ runner: clipboard listener,  |
- |   writes, tile, share sheet,     |          |   clipboard formats, images      |
- |   screenshots, updates           |          | Packages: tray, hotkey, drop,    |
- +----------------------------------+          |   single instance, start at login|
+ |   writes, tile, share sheet,     |          |   clipboard formats, images,     |
+ |   screenshots, downloads, updates|          |   file drops, hotkey             |
+ +----------------------------------+          | Packages: tray, single instance, |
+                                               |   toasts, start at login         |
                                                +----------------------------------+
 ```
 
@@ -149,7 +150,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 
 - **State:** `{on, changedAt, by}` (`lib/core/sharing/`), kept in each device's settings. Each time the link comes up, both send their state in a `sharing` frame, and the later change wins (ties go by device ID). Flipping the switch on either side sends the frame too; flipped while apart, it crosses on the next link-up. An older peer ignores the frame, so the link version didn't change.
 - **While off:**
-  - Copies are dropped both ways (the clip bridge checks the switch on both sides), and the phone's copy watcher reads nothing. Screenshots and files will be refused; sending a file offers "Turn on and send".
+  - Copies are dropped both ways (the clip bridge checks the switch on both sides), and the phone's copy watcher reads nothing. Screenshots and files are refused; sending a file offers "Turn on and send".
   - The link itself stays up, so either side can turn sharing back on.
   - The home screens say "Sharing off": the other device dims, and the ring and sweep don't play.
   - On the phone, the ongoing notification reads "Sharing off" with a Turn on button (Send and Turn off while on). On the PC, the tray icon is greyed out (`assets/tray/gotit-off.ico`, made from `gotit.ico` in greyscale) and the menu's Sharing item is unticked.
@@ -180,7 +181,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 - **Screenshots:** a `ContentObserver` on MediaStore notices library changes; Gotit then looks at the newest finished (`IS_PENDING` 0) image whose `RELATIVE_PATH` has a Screenshots folder, and sends it once, as PNG, if it is under 20 seconds old. It needs Photos access (`READ_MEDIA_IMAGES`, or `READ_EXTERNAL_STORAGE` before Android 13), asked for in the checklist, and does nothing while unpaired, while sharing is off, or with its Settings switch off.
 - **Files:**
   - Sending (M4a): `ShareActivity`, an invisible share target for any file and for text, opens each shared file the moment it is shared (Android's read permission ends with the share screen; an open file stays readable), and Dart pulls 256 KiB pieces of it through the share channel, so nothing is copied first. Shared text crosses like a copy sent with Send. The answer comes back as a toast (sent, not connected, not paired) or, while sharing is off, a dialog with Turn on and send. A share that starts the app waits in Kotlin until Dart listens, and the link gets a few seconds to come up. The ongoing notification shows the file's progress and Cancel.
-  - Receiving: received files go to `Download/Gotit` through MediaStore, with no storage permission needed. A notification offers Open and Share.
+  - Receiving (M4b): `PhoneSaves` writes each file straight into `Download/Gotit` through MediaStore, with no storage permission needed: inserted pending (`IS_PENDING` 1, hidden from other apps), written in order on one thread as the pieces arrive, then shown, or deleted if it didn't arrive whole. MediaStore names it, making a clashing name unique ("name (1).ext"), and a file bigger than the free room (less 64 MB) is refused at once. Refused while sharing is off. The ongoing notification shows the file's progress and Cancel, then a notice from the PC offers Open and Share (Open folder for several; `FileActionActivity` opens Google's Files app at the folder, else the downloads list). A single image also goes on the clipboard as its MediaStore link, labelled "Gotit" so the watcher never sends it back.
 - **Quick settings tile:** the switch.
 
 ## PC app (Windows)
@@ -195,14 +196,16 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - **Updates:** the self-update passes `/RUNARGS=--hidden` to the setup when Gotit was in the tray, so the new version starts there too.
 - **Clipboard:** a small C++ plugin in the runner.
   - It listens with `AddClipboardFormatListener` (`WM_CLIPBOARDUPDATE`).
-  - It reads text (`CF_UNICODETEXT`) first, so copying cells or a document sends text. Otherwise an image: the registered `PNG` format as it is (it keeps transparency), or `CF_BITMAP`, which Windows makes from any bitmap format, encoded to PNG with WIC (`image_codec.cpp`). File lists (`CF_HDROP`) come in M4.
+  - It reads text (`CF_UNICODETEXT`) first, so copying cells or a document sends text. Otherwise an image: the registered `PNG` format as it is (it keeps transparency), or `CF_BITMAP`, which Windows makes from any bitmap format, encoded to PNG with WIC (`image_codec.cpp`). Copied files (`CF_HDROP`) never cross by themselves; Ctrl+F2 sends them.
   - It writes text, or an image as both `PNG` and a 32-bit `CF_DIB` decoded with WIC, so browsers, Office and Paint can all paste it.
   - A copy carrying `ExcludeClipboardContentFromMonitorProcessing`, or with `CanIncludeInClipboardHistory` set to 0, counts as sensitive and still crosses (the PLAN decision that passwords cross wins over the mark).
   - No Rust and no extra packages.
-- **Sending files:**
-  - Drag onto the window: `desktop_drop` 0.9.2.
-  - Explorer's Send to: the installer adds a "Gotit" shortcut to the SendTo folder. Its second launch hands the paths to the running app through `windows_single_instance` 1.2.0 (in since M2b1, where a second launch shows the running window), then exits.
-  - The hotkey: `hotkey_manager` 0.3.0 registers it, and the C++ plugin reads the copied file list. Folders are zipped before sending.
+- **Sending files** (M4b, `PcSender` and `PcSends`):
+  - Dropping on the window: the runner registers the Flutter view as an OLE drop target (`files_bridge.cpp`; the runner initialises OLE), takes only file lists (`CF_HDROP`), and tells Dart while files hover, so home's dashed "Drop files here to send" lights up. No `desktop_drop`: it would also put a drag listener into the phone app.
+  - Explorer's Send to: the installer adds a "Gotit" shortcut to the user's SendTo folder that runs `gotit.exe --send`, and Explorer adds the chosen paths. A second launch hands them to the running app through `windows_single_instance` 1.2.0 and exits; its pipe takes 16 KB, so a longer list goes through a temporary file. A closed Gotit starts in the tray and sends, giving the phone up to 6 seconds to link within its first 30 seconds.
+  - Ctrl+F2: `RegisterHotKey` in the runner; on `WM_HOTKEY` it reads the files copied in Explorer (`CF_HDROP`). When another app already holds Ctrl+F2, the drop area says so.
+  - Folders are zipped first (`ZippedFolder`, `archive` 4.6) in their own isolate, which Cancel can stop at once, into `%TEMP%\gotit-send`, cleared after the send and at start. The zip holds the folder itself; photos, videos, music and archives are stored as they are and the rest deflated. Every folder of a batch is zipped before its first file goes.
+  - Answers: dropped files are answered in the window (progress on home; a message when the phone isn't connected); Send to and Ctrl+F2 with toasts ("Sending to", "isn't connected", "No files copied") and the tray's check once sent. Sharing off always brings the window up asking "Turn on and send".
 - **Receiving files** (M4a): into `Downloads\Gotit` through `.gotit-part` files renamed once whole (`FolderStore`), refused while sharing is off. Each batch then goes on the clipboard as files (`CF_HDROP` with the copy drop effect, so Ctrl+V copies it into a folder, an email or a chat), a single image also as a picture (decoded with WIC, skipped above 40 million pixels), and a toast names the phone with Open and Show in folder (`local_notifier` 0.1.6; Windows needs the Start menu shortcut with the app ID "Gotit", which the installer sets and the toasts use). Home lists transfers with progress, Cancel and Open.
 - **Start with Windows** (`lib/core/platform/start_with_windows.dart`, M2b1):
   - **How:** a value named Gotit in the per-user Run key, written with `win32_registry` 3.0.3. No admin is needed. (`launch_at_startup` needs an older `win32` than `package_info_plus` does, so it can't be used.)
@@ -216,7 +219,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 - Its identity (key and certificate), in the platform's secure storage, and in `settings.json` the paired device's ID, name and certificate (plus, on the phone, the PC's last address).
 - The switch state.
 - The recent list: the last 20 items as JSON, holding kind, direction, time, a short preview (never for sensitive items) and the file location. Sensitive items are dropped after a minute.
-- Settings (`settings.json` in the app's support folder): the PC's name, start with Windows, and later the hotkey.
+- Settings (`settings.json` in the app's support folder): the PC's name and start with Windows.
 
 Nothing else is stored, and nothing leaves the local network except the update check with GitHub. Logs never hold what was copied.
 

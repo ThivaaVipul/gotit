@@ -10,6 +10,7 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  archive: ^4.6.0
   basic_utils: ^5.8.2
   bonsoir: ^7.1.5
   crypto: ^3.0.8

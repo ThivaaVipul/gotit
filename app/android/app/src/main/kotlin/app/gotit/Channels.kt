@@ -145,6 +145,9 @@ object Channels {
         // Share > Gotit, and the notification's Cancel.
         ShareRelay.register(messenger)
 
+        // Files from the PC: Download/Gotit, and the notice when they arrived.
+        PhoneSaves.register(app, messenger)
+
         // The sharing switch: Dart sends it here for the tile and the copy
         // watcher; Kotlin sends back taps on the tile and the notification.
         sharing = MethodChannel(messenger, "app.gotit/sharing").apply {

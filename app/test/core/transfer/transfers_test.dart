@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gotit/core/link/frame.dart';
 import 'package:gotit/core/link/protocol.dart';
@@ -100,6 +101,45 @@ class MemoryFile implements OutgoingFile {
       yield bytes.sublist(at, min(at + piece, bytes.length));
     }
   }
+}
+
+/// A file made just before it is sent (a folder, zipped), from memory.
+/// [fail] makes it fail; [hold] keeps it being made until completed.
+class MadeFile implements PreparedFile {
+  MadeFile(this.name, this.bytes, {this.fail = false, this.hold});
+
+  @override
+  final String name;
+  final Uint8List bytes;
+  final bool fail;
+  final Completer<void>? hold;
+  bool made = false;
+  bool stopped = false;
+  int disposed = 0;
+
+  @override
+  int get size => made ? bytes.length : -1;
+
+  @override
+  Future<void> prepare() async {
+    await hold?.future;
+    if (stopped) throw StateError('Stopped');
+    if (fail) throw const FileSystemException('Locked');
+    made = true;
+  }
+
+  @override
+  void stop() {
+    stopped = true;
+    final hold = this.hold;
+    if (hold != null && !hold.isCompleted) hold.complete();
+  }
+
+  @override
+  Stream<List<int>> read() => Stream.value(bytes);
+
+  @override
+  Future<void> dispose() async => disposed++;
 }
 
 Uint8List _bytes(int length, [int seed = 1]) {
@@ -240,6 +280,85 @@ void main() {
       SendResult.cancelled,
     );
     expect(pc.value.single.status, TransferStatus.failed);
+  });
+
+  test('a folder is made before its batch goes, and removed after', () async {
+    final folder = MadeFile('docs.zip', _bytes(80 * 1024, 4));
+    var madeFirst = false;
+    phone.addListener(() {
+      if (phone.value.length == 1 && phone.value.single.preparing) {
+        madeFirst = true;
+      }
+    });
+    final result = await phone.send([
+      MemoryFile('a.txt', _bytes(10, 5)),
+      folder,
+    ]);
+    expect(result, SendResult.sent);
+    expect(madeFirst, isTrue);
+    expect(folder.disposed, 1);
+    expect(store.kept['docs.zip'], folder.bytes);
+    expect(batches.single.map((f) => f.name), ['a.txt', 'docs.zip']);
+    expect(phone.value.map((t) => t.status), everyElement(TransferStatus.done));
+  });
+
+  test('a folder that cannot be made sends nothing of its batch', () async {
+    final folder = MadeFile('docs.zip', _bytes(10), fail: true);
+    final result = await phone.send([MemoryFile('a.txt', _bytes(10)), folder]);
+    expect(result, SendResult.failed);
+    expect(pc.value, isEmpty);
+    expect(store.kept, isEmpty);
+    expect(folder.disposed, 1);
+    expect(phone.value.single.status, TransferStatus.failed);
+  });
+
+  test('cancel while a folder is being made stops it at once', () async {
+    final hold = Completer<void>();
+    final folder = MadeFile('docs.zip', _bytes(10), hold: hold);
+    final sending = phone.send([folder, MemoryFile('b.txt', _bytes(10))]);
+    await Future<void>.delayed(Duration.zero);
+    expect(phone.value.single.preparing, isTrue);
+    phone.cancel(phone.value.single.id);
+    expect(await sending, SendResult.cancelled);
+    expect(folder.stopped, isTrue);
+    expect(folder.disposed, 1);
+    expect(phone.value.single.status, TransferStatus.cancelled);
+    expect(pc.value, isEmpty);
+  });
+
+  test('a later file failing ends the rows still waiting', () async {
+    final folder = MadeFile('docs.zip', _bytes(10));
+    store.full = true;
+    final result = await phone.send([MemoryFile('a.txt', _bytes(10)), folder]);
+    expect(result, SendResult.cancelled);
+    expect(phone.value, hasLength(2));
+    expect(phone.value.where((t) => t.running), isEmpty);
+  });
+
+  test('a batch lost between two of its files hands over the first', () async {
+    final bytes = _bytes(10);
+    final handler = pcEnd._handler!;
+    await handler(
+      Frame(Frames.fileOffer, {
+        'id': 'f1',
+        'name': 'a.txt',
+        'size': 10,
+        'batch': 'b1',
+        'index': 0,
+        'count': 2,
+      }),
+    );
+    await handler(Frame(Frames.fileChunk, {'id': 'f1'}, bytes));
+    await handler(
+      Frame(Frames.fileDone, {
+        'id': 'f1',
+        'sha256': sha256.convert(bytes).toString(),
+      }),
+    );
+    expect(batches, isEmpty);
+    pcEnd.changes.add(false);
+    await Future<void>.delayed(Duration.zero);
+    expect(batches.single.single.name, 'a.txt');
   });
 
   group('names', () {

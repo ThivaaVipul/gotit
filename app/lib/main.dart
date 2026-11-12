@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gotit/app/app.dart';
 import 'package:gotit/app/desktop_shell.dart';
+import 'package:gotit/app/pc_sends.dart';
 import 'package:gotit/app/services.dart';
 import 'package:gotit/core/app_version.dart';
 import 'package:gotit/core/clip/bridge.dart';
@@ -17,7 +18,9 @@ import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/clipboard.dart';
 import 'package:gotit/core/platform/device.dart';
 import 'package:gotit/core/platform/mdns.dart';
+import 'package:gotit/core/platform/pc_files.dart';
 import 'package:gotit/core/platform/pc_notices.dart';
+import 'package:gotit/core/platform/phone_downloads.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/platform/share_target.dart';
 import 'package:gotit/core/platform/sharing_controls.dart';
@@ -26,6 +29,7 @@ import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/notice_keeper.dart';
 import 'package:gotit/core/state/settings.dart';
 import 'package:gotit/core/transfer/folder_store.dart';
+import 'package:gotit/core/transfer/pc_sender.dart';
 import 'package:gotit/core/transfer/transfers.dart';
 import 'package:gotit/core/update/installer.dart';
 import 'package:gotit/core/update/release_info.dart';
@@ -39,16 +43,40 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   DesktopShell? shell;
+  PcSends? pcSends;
+  // Send to's files: the ones Gotit started with, and any a second launch
+  // handed over before sending was ready.
+  final toSend = <List<String>>[];
   if (Platform.isWindows) {
-    // A second launch (the Start menu, Send to) shows the running copy and
-    // quits.
+    final sendAtStart = await sendRequest(args);
+    if (sendAtStart != null) toSend.add(sendAtStart);
+    // A second launch hands its arguments to the running copy and quits:
+    // Send to's files are sent, and anything else (the Start menu) shows the
+    // window.
+    final handOver = await handOverArgs(args, _sendTemp);
     await WindowsSingleInstance.ensureSingleInstance(
-      args,
+      handOver,
       'app-gotit-single-instance',
       bringWindowToFront: false,
-      onSecondWindow: (_) => shell?.showWindow(),
+      onSecondWindow: (second) async {
+        final paths = await sendRequest(second);
+        if (paths == null) {
+          await shell?.showWindow();
+        } else if (pcSends case final sends?) {
+          await sends.fromTray(paths);
+        } else {
+          toSend.add(paths);
+        }
+      },
     );
-    shell = await DesktopShell.start(hidden: args.contains('--hidden'));
+    // This is the running copy: a list written to hand over isn't needed.
+    if (!identical(handOver, args)) {
+      unawaited(_deleteQuietly(File(handOver.last)));
+    }
+    await _clearSendTemp();
+    shell = await DesktopShell.start(
+      hidden: args.contains('--hidden') || sendAtStart != null,
+    );
   }
 
   // Inter ships under the SIL Open Font License, which travels with it.
@@ -90,6 +118,8 @@ Future<void> main(List<String> args) async {
   PhoneSetup? phoneSetup;
   SharingSwitch? sharing;
   Transfers? transfers;
+  PcFiles? pcFiles;
+  GlobalKey<NavigatorState>? navigator;
   // The switch both devices share, kept across restarts.
   SharingSwitch sharingOver(SharingLink link) => SharingSwitch(
     initial: settings.value.sharing ?? SharingState.initial,
@@ -132,7 +162,7 @@ Future<void> main(List<String> args) async {
     final notices = PcNotices();
     unawaited(notices.setup(localBuild: isLocalBuild(version)));
     final link = pcLink;
-    transfers = Transfers(
+    final pcTransfers = Transfers(
       link: link,
       store: GatedStore(
         FolderStore(() async {
@@ -157,6 +187,29 @@ Future<void> main(List<String> args) async {
         );
       },
     )..start();
+    transfers = pcTransfers;
+    // Files to the phone: dropped on the window, Send to, or Ctrl+F2.
+    final appNavigator = navigator = GlobalKey<NavigatorState>();
+    final files = pcFiles = PcFiles();
+    final sends = PcSends(
+      sender: PcSender(
+        link: link,
+        transfers: pcTransfers,
+        phoneName: () => link.state.phone?.name,
+        sharingOn: () => pcSharing.on,
+        turnSharingOn: () => pcSharing.set(on: true),
+        temp: _sendTemp,
+      ),
+      notices: notices,
+      navigator: appNavigator,
+      phoneName: () => link.state.phone?.name ?? 'your phone',
+      shell: shell,
+    );
+    files
+      ..onDropped = ((paths) => unawaited(sends.dropped(paths)))
+      ..onHotkey = ((paths) => unawaited(sends.fromTray(paths, hotkey: true)));
+    unawaited(files.start());
+    pcSends = sends;
   } else {
     final pcFinder = BonsoirPcFinder();
     finder = pcFinder;
@@ -181,11 +234,15 @@ Future<void> main(List<String> args) async {
     final link = phoneLink;
     final setup = ChannelPhoneSetup();
     phoneSetup = setup;
-    // Files: sent from the share sheet. Receiving them comes in M4b, so for
-    // now every file from the PC is refused and the PC stops at once.
+    // Files: sent from the share sheet; from the PC they go to
+    // Download/Gotit, with a notice. Refused while sharing is off.
+    final downloads = PhoneDownloads();
     final phoneTransfers = Transfers(
       link: link,
-      store: GatedStore(null, open: () => false),
+      store: GatedStore(downloads, open: () => phoneSharing.on),
+      onBatch: (files) => unawaited(
+        downloads.arrived(files, from: link.state.pc?.name ?? 'your PC'),
+      ),
     )..start();
     transfers = phoneTransfers;
     final notice = NoticeKeeper(
@@ -226,9 +283,54 @@ Future<void> main(List<String> args) async {
         phoneSetup: phoneSetup,
         sharing: sharing,
         transfers: transfers,
+        pcFiles: pcFiles,
+        navigator: navigator,
       ),
     ),
   );
+
+  // Send to's files, now that the window can ask if it must.
+  if (pcSends case final sends?) {
+    final waiting = List.of(toSend);
+    toSend.clear();
+    for (final paths in waiting) {
+      unawaited(sends.fromTray(paths));
+    }
+  }
+}
+
+/// Where the PC zips folders to send, and keeps a long Send to list a second
+/// launch hands over.
+Future<Directory> _sendTemp() async => Directory(
+  '${Directory.systemTemp.path}${Platform.pathSeparator}gotit-send',
+);
+
+/// Clears zips a send left behind (Gotit was closed while sending) and
+/// hand-over lists nobody read.
+Future<void> _clearSendTemp() async {
+  final dir = await _sendTemp();
+  if (!dir.existsSync()) return;
+  final old = DateTime.now().subtract(const Duration(minutes: 10));
+  try {
+    await for (final entry in dir.list()) {
+      final name = entry.uri.pathSegments.where((s) => s.isNotEmpty).last;
+      if (name.startsWith('zip-') ||
+          (name.startsWith('send-') &&
+              entry.statSync().modified.isBefore(old))) {
+        await entry.delete(recursive: true);
+      }
+    }
+  } on FileSystemException {
+    // Tried again at the next start.
+  }
+}
+
+Future<void> _deleteQuietly(File file) async {
+  try {
+    await file.delete();
+  } on FileSystemException {
+    // Gone already.
+  }
 }
 
 /// Starts the PC's listener and its mDNS advertisement, and keeps both

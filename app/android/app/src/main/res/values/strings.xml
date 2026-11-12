@@ -15,5 +15,13 @@
     <string name="share_failed">Couldn\'t send</string>
     <string name="share_off_title">Sharing is off</string>
     <string name="share_off_turn_on">Turn on and send</string>
+    <string name="files_channel">Files from your PC</string>
+    <string name="files_from">From %1$s</string>
+    <string name="files_count">%1$d files</string>
+    <string name="files_on_clipboard">%1$s - on the clipboard</string>
+    <string name="files_open">Open</string>
+    <string name="files_open_folder">Open folder</string>
+    <string name="files_share">Share</string>
+    <string name="files_no_app">No app can open it</string>
     <string name="watcher_description">Notices when you copy something on this phone, so Gotit can send it to your PC. It reads the clipboard only right after a copy, and keeps nothing.\n\nTurn on the main switch. The shortcut isn\'t needed.</string>
 </resources>

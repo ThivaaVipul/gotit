@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gotit/app/services.dart';
 import 'package:gotit/app/theme/gotit_motion.dart';
 import 'package:gotit/app/widgets/catch_mark.dart';
+import 'package:gotit/core/link/pc_link.dart';
+import 'package:gotit/core/platform/phone_downloads.dart';
 import 'package:gotit/core/platform/shell.dart';
 import 'package:gotit/core/update/updater.dart';
+import 'package:gotit/features/home/cubit/link_cubits.dart';
+import 'package:gotit/features/home/widgets/drop_zone.dart';
 import 'package:gotit/features/home/widgets/link_hero.dart';
 import 'package:gotit/features/home/widgets/sharing_row.dart';
 import 'package:gotit/features/home/widgets/transfers_card.dart';
@@ -58,7 +63,14 @@ class HomePage extends StatelessWidget {
             if (services.transfers case final transfers?)
               TransfersCard(
                 transfers: transfers,
-                onOpen: services.isPc ? openPath : null,
+                onOpen: services.isPc ? openPath : openOnPhone,
+              ),
+            if (services.pcFiles case final files?)
+              BlocSelector<PcLinkCubit, PcLinkState, String?>(
+                selector: (state) => state.phone?.name,
+                builder: (context, phone) => phone == null
+                    ? const SizedBox.shrink()
+                    : DropZone(files: files, phone: phone),
               ),
             if (services.phoneSetup case final setup?)
               SetupChecklist(setup: setup),
