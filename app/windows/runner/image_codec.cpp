@@ -90,22 +90,17 @@ std::optional<std::vector<uint8_t>> BitmapToPng(HBITMAP bitmap) {
   return png;
 }
 
-std::optional<std::vector<uint8_t>> PngToDib(const std::vector<uint8_t>& png) {
-  ComPtr<IWICImagingFactory> factory = Factory();
-  if (!factory || png.empty()) return std::nullopt;
-  ComPtr<IWICStream> stream;
-  ComPtr<IWICBitmapDecoder> decoder;
-  ComPtr<IWICBitmapFrameDecode> frame;
-  if (FAILED(factory->CreateStream(&stream)) ||
-      FAILED(stream->InitializeFromMemory(const_cast<BYTE*>(png.data()),
-                                          static_cast<DWORD>(png.size()))) ||
-      FAILED(factory->CreateDecoderFromStream(
-          stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder)) ||
-      FAILED(decoder->GetFrame(0, &frame))) {
-    return std::nullopt;
-  }
+namespace {
+
+// More pixels than this aren't put on the clipboard as a picture: decoding
+// them would take hundreds of megabytes.
+constexpr UINT64 kMaxPicturePixels = 40'000'000;
+
+// |frame| as a 32-bit bottom-up CF_DIB.
+std::optional<std::vector<uint8_t>> FrameToDib(IWICImagingFactory* factory,
+                                               IWICBitmapSource* frame) {
   ComPtr<IWICBitmapSource> pixels =
-      InFormat(factory.Get(), frame.Get(), GUID_WICPixelFormat32bppBGRA);
+      InFormat(factory, frame, GUID_WICPixelFormat32bppBGRA);
   UINT width = 0;
   UINT height = 0;
   if (!pixels || FAILED(pixels->GetSize(&width, &height)) || width == 0 ||
@@ -139,4 +134,94 @@ std::optional<std::vector<uint8_t>> PngToDib(const std::vector<uint8_t>& png) {
                 rows.data() + static_cast<size_t>(y) * stride, stride);
   }
   return dib;
+}
+
+// |source| encoded as PNG.
+std::optional<std::vector<uint8_t>> EncodePng(IWICImagingFactory* factory,
+                                              IWICBitmapSource* source) {
+  UINT width = 0;
+  UINT height = 0;
+  if (FAILED(source->GetSize(&width, &height)) || width == 0 || height == 0) {
+    return std::nullopt;
+  }
+  ComPtr<IStream> stream;
+  ComPtr<IWICBitmapEncoder> encoder;
+  ComPtr<IWICBitmapFrameEncode> frame;
+  if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream)) ||
+      FAILED(factory->CreateEncoder(GUID_ContainerFormatPng, nullptr,
+                                    &encoder)) ||
+      FAILED(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache)) ||
+      FAILED(encoder->CreateNewFrame(&frame, nullptr)) ||
+      FAILED(frame->Initialize(nullptr)) ||
+      FAILED(frame->SetSize(width, height))) {
+    return std::nullopt;
+  }
+  WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
+  if (FAILED(frame->SetPixelFormat(&format))) return std::nullopt;
+  ComPtr<IWICBitmapSource> pixels = InFormat(factory, source, format);
+  if (!pixels || FAILED(frame->WriteSource(pixels.Get(), nullptr)) ||
+      FAILED(frame->Commit()) || FAILED(encoder->Commit())) {
+    return std::nullopt;
+  }
+  STATSTG stat{};
+  HGLOBAL memory = nullptr;
+  if (FAILED(stream->Stat(&stat, STATFLAG_NONAME)) ||
+      FAILED(GetHGlobalFromStream(stream.Get(), &memory))) {
+    return std::nullopt;
+  }
+  const auto size = static_cast<size_t>(stat.cbSize.QuadPart);
+  const void* bytes = GlobalLock(memory);
+  if (!bytes) return std::nullopt;
+  std::vector<uint8_t> png(size);
+  std::memcpy(png.data(), bytes, size);
+  GlobalUnlock(memory);
+  return png;
+}
+
+}  // namespace
+
+std::optional<std::vector<uint8_t>> PngToDib(const std::vector<uint8_t>& png) {
+  ComPtr<IWICImagingFactory> factory = Factory();
+  if (!factory || png.empty()) return std::nullopt;
+  ComPtr<IWICStream> stream;
+  ComPtr<IWICBitmapDecoder> decoder;
+  ComPtr<IWICBitmapFrameDecode> frame;
+  if (FAILED(factory->CreateStream(&stream)) ||
+      FAILED(stream->InitializeFromMemory(const_cast<BYTE*>(png.data()),
+                                          static_cast<DWORD>(png.size()))) ||
+      FAILED(factory->CreateDecoderFromStream(
+          stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder)) ||
+      FAILED(decoder->GetFrame(0, &frame))) {
+    return std::nullopt;
+  }
+  return FrameToDib(factory.Get(), frame.Get());
+}
+
+std::optional<Picture> PictureFromFile(const std::wstring& path) {
+  ComPtr<IWICImagingFactory> factory = Factory();
+  if (!factory) return std::nullopt;
+  ComPtr<IWICBitmapDecoder> decoder;
+  ComPtr<IWICBitmapFrameDecode> frame;
+  if (FAILED(factory->CreateDecoderFromFilename(
+          path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand,
+          &decoder)) ||
+      FAILED(decoder->GetFrame(0, &frame))) {
+    return std::nullopt;
+  }
+  UINT width = 0;
+  UINT height = 0;
+  if (FAILED(frame->GetSize(&width, &height)) ||
+      static_cast<UINT64>(width) * height > kMaxPicturePixels) {
+    return std::nullopt;
+  }
+  // Decoded once, used for both.
+  ComPtr<IWICBitmap> decoded;
+  if (FAILED(factory->CreateBitmapFromSource(frame.Get(), WICBitmapCacheOnLoad,
+                                             &decoded))) {
+    return std::nullopt;
+  }
+  std::optional<std::vector<uint8_t>> png = EncodePng(factory.Get(), decoded.Get());
+  std::optional<std::vector<uint8_t>> dib = FrameToDib(factory.Get(), decoded.Get());
+  if (!png || !dib) return std::nullopt;
+  return Picture{std::move(*png), std::move(*dib)};
 }

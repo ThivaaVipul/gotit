@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/sharing/sharing.dart';
+import 'package:gotit/core/transfer/transfers.dart';
 
 /// Keeps the phone's ongoing notification in step with the link: there while
 /// paired, saying how the link stands, "Sent to" the PC for a while after a
@@ -16,6 +17,7 @@ class NoticeKeeper {
     required this.notice,
     this.watcher,
     this.sharing,
+    this.transfers,
     this.sentFor = const Duration(minutes: 1),
   });
 
@@ -29,6 +31,9 @@ class NoticeKeeper {
 
   /// The sharing switch.
   final ValueListenable<SharingState>? sharing;
+
+  /// Files on their way: one being sent shows its progress and Cancel.
+  final ValueListenable<List<Transfer>>? transfers;
   final Duration sentFor;
 
   StreamSubscription<PhoneLinkState>? _listening;
@@ -36,7 +41,8 @@ class NoticeKeeper {
   WatcherState? _watcher;
   Timer? _sentTimer;
   bool _sentRecently = false;
-  (String, String?, bool)? _shown;
+  (String, String?, bool, int?, String?)? _shown;
+  final _wasSending = <String>{};
 
   void start() {
     _listening = states.listen(_update);
@@ -45,6 +51,7 @@ class NoticeKeeper {
       _update(current());
     });
     sharing?.addListener(_sharingChanged);
+    transfers?.addListener(_transfersChanged);
     _update(current());
   }
 
@@ -52,10 +59,26 @@ class NoticeKeeper {
     await _listening?.cancel();
     await _watching?.cancel();
     sharing?.removeListener(_sharingChanged);
+    transfers?.removeListener(_transfersChanged);
     _sentTimer?.cancel();
   }
 
   void _sharingChanged() => _update(current());
+
+  void _transfersChanged() {
+    // A file that just finished sending gets the same quiet sign as a copy.
+    for (final transfer in transfers?.value ?? const <Transfer>[]) {
+      if (transfer.direction != TransferDirection.sending) continue;
+      if (transfer.running) {
+        _wasSending.add(transfer.id);
+      } else if (_wasSending.remove(transfer.id) &&
+          transfer.status == TransferStatus.done) {
+        sent();
+        return;
+      }
+    }
+    _update(current());
+  }
 
   /// A copy from this phone reached the PC.
   void sent() {
@@ -95,7 +118,39 @@ class NoticeKeeper {
             WatcherState.turnedOff => 'Copy watching is off',
             _ => null,
           };
-    final next = (title, text, on);
+    // A file on its way takes the notification over: its name, its
+    // progress, and Cancel.
+    Transfer? sending;
+    for (final transfer in transfers?.value ?? const <Transfer>[]) {
+      if (transfer.running && transfer.direction == TransferDirection.sending) {
+        sending = transfer;
+      }
+    }
+    if (sending != null && state.connection == Connection.online) {
+      final percent = sending.progress == null
+          ? null
+          : (sending.progress! * 100).round();
+      final next = (
+        'Sending to ${pc.name}',
+        sending.name,
+        on,
+        percent,
+        sending.id,
+      );
+      if (next == _shown) return;
+      _shown = next;
+      unawaited(
+        notice.show(
+          next.$1,
+          text: next.$2,
+          sharing: on,
+          percent: percent,
+          cancel: sending.id,
+        ),
+      );
+      return;
+    }
+    final next = (title, text, on, null, null);
     if (next == _shown) return;
     _shown = next;
     unawaited(notice.show(title, text: text, sharing: on));

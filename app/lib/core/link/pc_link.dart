@@ -12,6 +12,7 @@ import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/protocol.dart';
 import 'package:gotit/core/link/session.dart';
 import 'package:gotit/core/sharing/sharing.dart';
+import 'package:gotit/core/transfer/transfers.dart';
 
 /// How the link to the other device stands.
 enum Connection {
@@ -107,7 +108,7 @@ class PcLinkState {
 /// One TLS port does both. A phone that is pairing shows no certificate and
 /// can only ask to pair. The paired phone shows the certificate pinned when
 /// they paired, and nothing else is let in.
-class PcLink implements ClipLink, SharingLink {
+class PcLink implements ClipLink, SharingLink, FileLink {
   PcLink({
     required this.identity,
     required this.name,
@@ -148,6 +149,7 @@ class PcLink implements ClipLink, SharingLink {
   final _states = StreamController<PcLinkState>.broadcast();
   final _clips = StreamController<Clip>.broadcast();
   final _sharing = StreamController<SharingState>.broadcast();
+  Future<void> Function(Frame frame)? _fileFrames;
   final _invites = <String, DateTime>{};
   PcLinkState _state;
   SecureServerSocket? _server;
@@ -169,6 +171,19 @@ class PcLink implements ClipLink, SharingLink {
   @override
   Stream<bool> get linkedChanges =>
       states.map((state) => state.connection == Connection.online).distinct();
+
+  @override
+  set fileFrameHandler(Future<void> Function(Frame frame)? handler) =>
+      _fileFrames = handler;
+
+  /// Sends a file frame and waits until it has left, so a big file is read
+  /// no faster than it can go. False when not linked.
+  @override
+  Future<bool> sendFileFrame(Frame frame) async {
+    final session = _session;
+    if (session == null || !linked) return false;
+    return session.sendAndWait(frame);
+  }
 
   /// Sends the sharing switch to the phone, when they are linked.
   @override
@@ -432,6 +447,12 @@ class PcLink implements ClipLink, SharingLink {
         case Frames.sharing:
           final sharing = SharingState.fromFrame(frame);
           if (sharing != null && linked) _sharing.add(sharing);
+        case Frames.fileOffer ||
+            Frames.fileChunk ||
+            Frames.fileDone ||
+            Frames.fileCancel:
+          // Awaited: while a file is written, the next frame waits.
+          if (linked) await _fileFrames?.call(frame);
         case Frames.bye:
           // The phone forgot this pairing.
           await savePhone(null);

@@ -46,8 +46,10 @@ RestartApplications=no
 Source: "..\app\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; The AppUserModelID lets Gotit's notifications show under its own name.
-Name: "{autoprograms}\Gotit"; Filename: "{app}\gotit.exe"; AppUserModelID: "app.gotit"
+; The AppUserModelID lets Gotit's notifications show under its own name. It
+; matches the app name the toasts are set up with (local_notifier uses it as
+; the shortcut's name and its ID alike).
+Name: "{autoprograms}\Gotit"; Filename: "{app}\gotit.exe"; AppUserModelID: "Gotit"
 
 [Registry]
 ; Gotit adds itself to the per-user Run key when "Start with Windows" is on.

@@ -62,14 +62,27 @@ class LinkService : Service() {
         private var text: String? = null
         private var sharingOn = true
 
+        /** A file on its way: its percentage (null while unknown), and its ID for Cancel. */
+        private var progress: Int? = null
+        private var cancelId: String? = null
+
         /**
          * Shows or updates the notification. False when Android won't let the
          * service start from the background (the battery exemption allows it).
          */
-        fun show(context: Context, newTitle: String, newText: String?, sharing: Boolean = true): Boolean {
+        fun show(
+            context: Context,
+            newTitle: String,
+            newText: String?,
+            sharing: Boolean = true,
+            percent: Int? = null,
+            cancel: String? = null,
+        ): Boolean {
             title = newTitle
             text = newText
             sharingOn = sharing
+            progress = percent
+            cancelId = cancel
             instance?.let {
                 it.refresh()
                 return true
@@ -130,12 +143,19 @@ class LinkService : Service() {
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setContentIntent(open)
                 .apply {
-                    // Send and Turn off while sharing; only Turn on while it is off.
-                    if (sharingOn) {
-                        addAction(action(context, "Send", send))
-                        addAction(action(context, "Turn off", turn(context, on = false)))
-                    } else {
-                        addAction(action(context, "Turn on", turn(context, on = true)))
+                    val sending = cancelId
+                    when {
+                        // A file on its way: its progress, and Cancel.
+                        sending != null -> {
+                            setProgress(100, progress ?: 0, progress == null)
+                            addAction(action(context, "Cancel", stop(context, sending)))
+                        }
+                        // Send and Turn off while sharing; only Turn on while it is off.
+                        sharingOn -> {
+                            addAction(action(context, "Send", send))
+                            addAction(action(context, "Turn off", turn(context, on = false)))
+                        }
+                        else -> addAction(action(context, "Turn on", turn(context, on = true)))
                     }
                 }
                 .apply {
@@ -149,6 +169,14 @@ class LinkService : Service() {
         private fun action(context: Context, label: String, intent: PendingIntent) =
             Notification.Action.Builder(Icon.createWithResource(context, R.drawable.ic_stat_gotit), label, intent)
                 .build()
+
+        /** Stops the file on its way. */
+        private fun stop(context: Context, id: String): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            4,
+            Intent(context, CancelReceiver::class.java).putExtra(CancelReceiver.ID, id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
         /** Turns sharing on or off, for both devices. */
         private fun turn(context: Context, on: Boolean): PendingIntent = PendingIntent.getBroadcast(

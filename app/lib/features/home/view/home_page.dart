@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:gotit/app/services.dart';
 import 'package:gotit/app/theme/gotit_motion.dart';
 import 'package:gotit/app/widgets/catch_mark.dart';
+import 'package:gotit/core/platform/shell.dart';
 import 'package:gotit/core/update/updater.dart';
 import 'package:gotit/features/home/widgets/link_hero.dart';
 import 'package:gotit/features/home/widgets/sharing_row.dart';
+import 'package:gotit/features/home/widgets/transfers_card.dart';
 import 'package:gotit/features/settings/view/settings_page.dart';
 import 'package:gotit/features/setup/widgets/setup_checklist.dart';
 
@@ -53,6 +55,11 @@ class HomePage extends StatelessWidget {
               PhoneLinkHero(sharing: services.sharing),
             if (services.sharing case final sharing?)
               SharingRow(sharing: sharing, settings: services.settings),
+            if (services.transfers case final transfers?)
+              TransfersCard(
+                transfers: transfers,
+                onOpen: services.isPc ? openPath : null,
+              ),
             if (services.phoneSetup case final setup?)
               SetupChecklist(setup: setup),
             const SizedBox(height: 24),

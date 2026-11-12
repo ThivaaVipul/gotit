@@ -5,6 +5,7 @@ import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
 import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/settings.dart';
+import 'package:gotit/core/transfer/transfers.dart';
 import 'package:gotit/core/update/updater.dart';
 
 /// What the screens need from the rest of the app, made once in main.
@@ -21,6 +22,7 @@ class AppServices {
     this.finder,
     this.phoneSetup,
     this.sharing,
+    this.transfers,
   });
 
   final String version;
@@ -51,6 +53,9 @@ class AppServices {
 
   /// The shared sharing switch, once paired devices can use it.
   final SharingSwitch? sharing;
+
+  /// Files on their way, either way.
+  final Transfers? transfers;
 
   /// The PC's name as the phone shows it.
   String get pcName => effectivePcName(settings.value, windowsName);

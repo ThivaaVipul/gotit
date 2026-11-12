@@ -140,6 +140,23 @@ void main() {
     expect(clipboard.written, isEmpty);
   });
 
+  test('sending now goes past the guard, but not while off or away', () async {
+    link.incoming.add(Clip(text: 'shared'));
+    await settle();
+    final bridge = ClipBridge(
+      link: link,
+      clipboard: clipboard,
+      sharing: () => sharingOn,
+    );
+    expect(bridge.sendNow(Clip(text: 'shared', manual: true)), isTrue);
+    sharingOn = false;
+    expect(bridge.sendNow(Clip(text: 'shared', manual: true)), isFalse);
+    sharingOn = true;
+    link.online = false;
+    expect(bridge.sendNow(Clip(text: 'shared', manual: true)), isFalse);
+    expect(link.sent, ['shared']);
+  });
+
   test('empty or oversized copies stay put', () async {
     clipboard.local
       ..add(Clip(text: ''))

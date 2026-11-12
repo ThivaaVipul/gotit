@@ -37,6 +37,11 @@ class ChannelClipboard implements DeviceClipboard {
   @override
   Stream<Clip> get copies => _copies.stream;
 
+  /// The PC only: [paths] on the clipboard as files, ready to paste, and
+  /// the image at [picture] as a picture too.
+  Future<void> writeFiles(List<String> paths, {String? picture}) => _channel
+      .invokeMethod<void>('writeFiles', {'paths': paths, 'picture': ?picture});
+
   @override
   Future<void> write(Clip clip) => _channel.invokeMethod<void>('write', {
     if (clip.isImage) 'image': clip.image else 'text': clip.text,

@@ -128,6 +128,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - Forget on either side sends `bye`, and the other side forgets too.
 - **Frames** (`frame.dart`):
   - Each frame is a 4-byte header length, a JSON header whose `t` is the type, a 4-byte body length, and the body.
+  - **Big transfers stay small in memory** (`session.dart`, M4): file chunks go through `sendAndWait`, which waits for each to leave before the next is read from disk (everything else queues in an outbox meanwhile, since the socket takes nothing during a flush), and reading pauses while 32 frames wait to be handled, so TCP slows a sender whose receiver writes slowly.
   - Headers are capped at 64 KiB and bodies at 26 MiB (a 25 MiB image with room to spare; 2 MiB until M3, which moved the link to version 2). Anything malformed ends the connection.
 
   | Frame | Carries |
@@ -138,7 +139,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   | `ping`, `pong` | liveness |
   | `sharing` (M2d) | the switch: on or off, when it changed, which device changed it |
   | `clip` (M2c, M3) | `kind` text or image, copied-at time, a sensitive flag; the body is the UTF-8 text or the PNG |
-  | `file.offer`, `file.chunk`, `file.done` (SHA-256), `file.cancel` (M4) | a file in 256 KiB chunks |
+  | `file.offer`, `file.chunk`, `file.done` (SHA-256), `file.cancel` (M4, link version 3) | a file in 256 KiB chunks: id, name, size and its batch; the receiver keeps it only when the SHA-256 matches |
 
   Text clips are capped at 1 MiB and images at 25 MiB. A bigger one stays where it was copied (M4 may send it as a file).
 - **Live only:** nothing is queued. A copy made while the two aren't connected is dropped (PLAN decision).
@@ -178,7 +179,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
 - **Phone to PC (images):** a copied image is a content URI on the clipboard. Read during the same moment of focus, it is turned into PNG off the main thread (passed through when it already is one), and skipped above 25 MiB or 24 million pixels, which could never fit and could run the phone out of memory.
 - **Screenshots:** a `ContentObserver` on MediaStore notices library changes; Gotit then looks at the newest finished (`IS_PENDING` 0) image whose `RELATIVE_PATH` has a Screenshots folder, and sends it once, as PNG, if it is under 20 seconds old. It needs Photos access (`READ_MEDIA_IMAGES`, or `READ_EXTERNAL_STORAGE` before Android 13), asked for in the checklist, and does nothing while unpaired, while sharing is off, or with its Settings switch off.
 - **Files:**
-  - Sending: a transparent share target activity receives the share sheet's items and passes their content URIs to the link task, which streams them.
+  - Sending (M4a): `ShareActivity`, an invisible share target for any file and for text, opens each shared file the moment it is shared (Android's read permission ends with the share screen; an open file stays readable), and Dart pulls 256 KiB pieces of it through the share channel, so nothing is copied first. Shared text crosses like a copy sent with Send. The answer comes back as a toast (sent, not connected, not paired) or, while sharing is off, a dialog with Turn on and send. A share that starts the app waits in Kotlin until Dart listens, and the link gets a few seconds to come up. The ongoing notification shows the file's progress and Cancel.
   - Receiving: received files go to `Download/Gotit` through MediaStore, with no storage permission needed. A notification offers Open and Share.
 - **Quick settings tile:** the switch.
 
@@ -202,7 +203,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - Drag onto the window: `desktop_drop` 0.9.2.
   - Explorer's Send to: the installer adds a "Gotit" shortcut to the SendTo folder. Its second launch hands the paths to the running app through `windows_single_instance` 1.2.0 (in since M2b1, where a second launch shows the running window), then exits.
   - The hotkey: `hotkey_manager` 0.3.0 registers it, and the C++ plugin reads the copied file list. Folders are zipped before sending.
-- **Receiving files:** received files go to `Downloads\Gotit`. A toast with Open comes through `flutter_local_notifications` 23.0.0, whose Windows part supports buttons. Toasts need the installer's Start menu shortcut with Gotit's AppUserModelID.
+- **Receiving files** (M4a): into `Downloads\Gotit` through `.gotit-part` files renamed once whole (`FolderStore`), refused while sharing is off. Each batch then goes on the clipboard as files (`CF_HDROP` with the copy drop effect, so Ctrl+V copies it into a folder, an email or a chat), a single image also as a picture (decoded with WIC, skipped above 40 million pixels), and a toast names the phone with Open and Show in folder (`local_notifier` 0.1.6; Windows needs the Start menu shortcut with the app ID "Gotit", which the installer sets and the toasts use). Home lists transfers with progress, Cancel and Open.
 - **Start with Windows** (`lib/core/platform/start_with_windows.dart`, M2b1):
   - **How:** a value named Gotit in the per-user Run key, written with `win32_registry` 3.0.3. No admin is needed. (`launch_at_startup` needs an older `win32` than `package_info_plus` does, so it can't be used.)
   - **Default:** the first launch of an installed copy turns it on. After that the setting in Settings sticks, and each launch rewrites the value so the path stays current.
