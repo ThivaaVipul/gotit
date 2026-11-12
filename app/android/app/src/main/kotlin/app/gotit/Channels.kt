@@ -124,6 +124,8 @@ object Channels {
                         call.argument<String>("title") ?: "Gotit",
                         call.argument<String>("text"),
                         sharing = call.argument<Boolean>("sharing") ?: true,
+                        percent = call.argument<Int>("percent"),
+                        cancel = call.argument<String>("cancel"),
                     ),
                 )
                 "hide" -> {
@@ -139,6 +141,9 @@ object Channels {
         setup = MethodChannel(messenger, "app.gotit/setup").apply {
             setMethodCallHandler { call, result -> onSetupCall(app, call, result) }
         }
+
+        // Share > Gotit, and the notification's Cancel.
+        ShareRelay.register(messenger)
 
         // The sharing switch: Dart sends it here for the tile and the copy
         // watcher; Kotlin sends back taps on the tile and the notification.

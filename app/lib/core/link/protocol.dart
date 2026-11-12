@@ -3,7 +3,8 @@ abstract final class LinkSpec {
   /// Bumped whenever the two sides would no longer understand each other.
   /// A mismatch shows "Update Gotit" on both, and nothing crosses.
   /// 2: image clips, in frames bigger than version 1 accepts.
-  static const version = 2;
+  /// 3: files.
+  static const version = 3;
 
   /// The mDNS service the PC advertises and the phone looks for.
   static const serviceType = '_gotit._tcp';
@@ -56,6 +57,19 @@ abstract final class Frames {
   /// changed, ms since epoch), by (the device ID where it was changed). Sent
   /// when it changes and each time the link comes up.
   static const sharing = 'sharing';
+
+  /// Both ways, on a paired link: a file is coming. id, name, size (-1 when
+  /// unknown), and batch, index and count for files sent together.
+  static const fileOffer = 'file.offer';
+
+  /// A piece of the file: id; the body is up to 256 KiB of it.
+  static const fileChunk = 'file.chunk';
+
+  /// The whole file has been sent: id, and sha256 (hex) of all of it.
+  static const fileDone = 'file.done';
+
+  /// Either side stops a file: id.
+  static const fileCancel = 'file.cancel';
 
   static const ping = 'ping';
   static const pong = 'pong';

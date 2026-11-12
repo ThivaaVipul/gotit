@@ -14,6 +14,7 @@ import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/protocol.dart';
 import 'package:gotit/core/link/session.dart';
 import 'package:gotit/core/sharing/sharing.dart';
+import 'package:gotit/core/transfer/transfers.dart';
 
 export 'package:gotit/core/link/pc_link.dart' show Connection;
 
@@ -114,7 +115,7 @@ class PhoneLinkState {
 
 /// The phone's side of the link: it pairs with a PC, then keeps a session
 /// with it open while it is running.
-class PhoneLink implements ClipLink, SharingLink {
+class PhoneLink implements ClipLink, SharingLink, FileLink {
   PhoneLink({
     required this.identity,
     required this.name,
@@ -161,6 +162,7 @@ class PhoneLink implements ClipLink, SharingLink {
   final _states = StreamController<PhoneLinkState>.broadcast();
   final _clips = StreamController<Clip>.broadcast();
   final _sharing = StreamController<SharingState>.broadcast();
+  Future<void> Function(Frame frame)? _fileFrames;
   PhoneLinkState _state;
   LinkSession? _session;
   bool _running = false;
@@ -181,6 +183,19 @@ class PhoneLink implements ClipLink, SharingLink {
   @override
   Stream<bool> get linkedChanges =>
       states.map((state) => state.connection == Connection.online).distinct();
+
+  @override
+  set fileFrameHandler(Future<void> Function(Frame frame)? handler) =>
+      _fileFrames = handler;
+
+  /// Sends a file frame and waits until it has left, so a big file is read
+  /// no faster than it can go. False when not linked.
+  @override
+  Future<bool> sendFileFrame(Frame frame) async {
+    final session = _session;
+    if (session == null || !linked) return false;
+    return session.sendAndWait(frame);
+  }
 
   /// Sends the sharing switch to the PC, when they are linked.
   @override
@@ -461,6 +476,12 @@ class PhoneLink implements ClipLink, SharingLink {
         case Frames.sharing:
           final sharing = SharingState.fromFrame(frame);
           if (sharing != null && linked) _sharing.add(sharing);
+        case Frames.fileOffer ||
+            Frames.fileChunk ||
+            Frames.fileDone ||
+            Frames.fileCancel:
+          // Awaited: while a file is written, the next frame waits.
+          if (linked) await _fileFrames?.call(frame);
         case Frames.bye:
           // The PC forgot this pairing.
           _running = false;

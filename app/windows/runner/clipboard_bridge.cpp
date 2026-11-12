@@ -1,6 +1,7 @@
 #include "clipboard_bridge.h"
 
 #include <flutter/standard_method_codec.h>
+#include <shlobj.h>
 
 #include "image_codec.h"
 
@@ -87,6 +88,7 @@ ClipboardBridge::ClipboardBridge(flutter::BinaryMessenger* messenger,
     : window_(window),
       own_format_(RegisterClipboardFormatW(L"Gotit.Own")),
       png_format_(RegisterClipboardFormatW(L"PNG")),
+      drop_effect_format_(RegisterClipboardFormatW(CFSTR_PREFERREDDROPEFFECT)),
       exclude_format_(RegisterClipboardFormatW(
           L"ExcludeClipboardContentFromMonitorProcessing")),
       history_format_(RegisterClipboardFormatW(L"CanIncludeInClipboardHistory")),
@@ -98,13 +100,43 @@ ClipboardBridge::ClipboardBridge(flutter::BinaryMessenger* messenger,
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
                  result) {
-        if (call.method_name() != "write") {
+        const bool files = call.method_name() == "writeFiles";
+        if (!files && call.method_name() != "write") {
           result->NotImplemented();
           return;
         }
         const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
         if (!args) {
           result->Error("args", "No arguments");
+          return;
+        }
+        if (files) {
+          // Files that arrived: ready to paste, and an image also as itself.
+          std::vector<std::wstring> paths;
+          auto list = args->find(flutter::EncodableValue("paths"));
+          if (list != args->end()) {
+            if (const auto* items = std::get_if<flutter::EncodableList>(&list->second)) {
+              for (const auto& item : *items) {
+                if (const auto* path = std::get_if<std::string>(&item)) {
+                  paths.push_back(ToUtf16(*path));
+                }
+              }
+            }
+          }
+          std::wstring picture;
+          auto image = args->find(flutter::EncodableValue("picture"));
+          if (image != args->end()) {
+            if (const auto* path = std::get_if<std::string>(&image->second)) {
+              picture = ToUtf16(*path);
+            }
+          }
+          if (paths.empty()) {
+            result->Error("args", "No paths");
+          } else if (WriteFiles(paths, picture)) {
+            result->Success();
+          } else {
+            result->Error("busy", "The clipboard is in use");
+          }
           return;
         }
         auto image = args->find(flutter::EncodableValue("image"));
@@ -218,6 +250,40 @@ bool ClipboardBridge::WriteImage(const std::vector<uint8_t>& png) {
   Put(png_format_, CopyToGlobal(png.data(), png.size()));
   // A bitmap too, for apps that only paste bitmaps (Paint, older Office).
   if (dib) Put(CF_DIB, CopyToGlobal(dib->data(), dib->size()));
+  const BYTE mark = 1;
+  Put(own_format_, CopyToGlobal(&mark, sizeof(mark)));
+  CloseClipboard();
+  return true;
+}
+
+bool ClipboardBridge::WriteFiles(const std::vector<std::wstring>& paths,
+                                 const std::wstring& picture) {
+  // CF_HDROP: a DROPFILES header, then the paths, each ending in a null, and
+  // one more null at the end.
+  size_t chars = 1;
+  for (const auto& path : paths) chars += path.size() + 1;
+  std::vector<uint8_t> drop(sizeof(DROPFILES) + chars * sizeof(wchar_t), 0);
+  auto* header = reinterpret_cast<DROPFILES*>(drop.data());
+  header->pFiles = sizeof(DROPFILES);
+  header->fWide = TRUE;
+  auto* out = reinterpret_cast<wchar_t*>(drop.data() + sizeof(DROPFILES));
+  for (const auto& path : paths) {
+    std::memcpy(out, path.c_str(), (path.size() + 1) * sizeof(wchar_t));
+    out += path.size() + 1;
+  }
+  // Decoded before the clipboard opens, so it is held only briefly.
+  std::optional<Picture> image;
+  if (!picture.empty()) image = PictureFromFile(picture);
+
+  if (!OpenWithRetry(window_)) return false;
+  EmptyClipboard();
+  Put(CF_HDROP, CopyToGlobal(drop.data(), drop.size()));
+  const DWORD copy = DROPEFFECT_COPY;
+  Put(drop_effect_format_, CopyToGlobal(&copy, sizeof(copy)));
+  if (image) {
+    Put(png_format_, CopyToGlobal(image->png.data(), image->png.size()));
+    Put(CF_DIB, CopyToGlobal(image->dib.data(), image->dib.size()));
+  }
   const BYTE mark = 1;
   Put(own_format_, CopyToGlobal(&mark, sizeof(mark)));
   CloseClipboard();

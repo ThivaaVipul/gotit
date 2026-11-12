@@ -191,9 +191,16 @@ class ChannelPhoneSetup implements PhoneSetup {
 /// The phone's ongoing notification, which also keeps the link running.
 abstract interface class LinkNotice {
   /// Shows or updates it, with Send and Turn off while [sharing], or Turn
-  /// on while not. False when Android won't start it from the background
-  /// (the battery step allows that).
-  Future<bool> show(String title, {String? text, bool sharing = true});
+  /// on while not; or, while a file is on its way, its [percent] (null while
+  /// unknown) and Cancel for the transfer [cancel]. False when Android won't
+  /// start it from the background (the battery step allows that).
+  Future<bool> show(
+    String title, {
+    String? text,
+    bool sharing = true,
+    int? percent,
+    String? cancel,
+  });
 
   Future<void> hide();
 }
@@ -204,12 +211,20 @@ class ChannelLinkNotice implements LinkNotice {
   static const _channel = MethodChannel('app.gotit/service');
 
   @override
-  Future<bool> show(String title, {String? text, bool sharing = true}) async {
+  Future<bool> show(
+    String title, {
+    String? text,
+    bool sharing = true,
+    int? percent,
+    String? cancel,
+  }) async {
     try {
       return await _channel.invokeMethod<bool>('show', {
             'title': title,
             'text': text,
             'sharing': sharing,
+            'percent': percent,
+            'cancel': cancel,
           }) ??
           false;
     } on PlatformException {

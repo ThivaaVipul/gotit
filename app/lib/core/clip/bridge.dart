@@ -65,6 +65,15 @@ class ClipBridge {
     _subscriptions.clear();
   }
 
+  /// Sends [clip] now, past the guard (it was sent on purpose): true when
+  /// it went.
+  bool sendNow(Clip clip) {
+    if (!sharing() || clip.isEmpty || clip.tooBig) return false;
+    final sent = link.sendClip(clip);
+    if (sent) onSent?.call(clip);
+    return sent;
+  }
+
   void _copied(Clip clip) {
     if (!sharing() || clip.isEmpty || clip.tooBig) return;
     // Send on purpose always sends; a watched copy goes through the guard.

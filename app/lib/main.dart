@@ -17,12 +17,16 @@ import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/clipboard.dart';
 import 'package:gotit/core/platform/device.dart';
 import 'package:gotit/core/platform/mdns.dart';
+import 'package:gotit/core/platform/pc_notices.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
+import 'package:gotit/core/platform/share_target.dart';
 import 'package:gotit/core/platform/sharing_controls.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
 import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/notice_keeper.dart';
 import 'package:gotit/core/state/settings.dart';
+import 'package:gotit/core/transfer/folder_store.dart';
+import 'package:gotit/core/transfer/transfers.dart';
 import 'package:gotit/core/update/installer.dart';
 import 'package:gotit/core/update/release_info.dart';
 import 'package:gotit/core/update/update_source.dart';
@@ -85,6 +89,7 @@ Future<void> main(List<String> args) async {
   PcFinder? finder;
   PhoneSetup? phoneSetup;
   SharingSwitch? sharing;
+  Transfers? transfers;
   // The switch both devices share, kept across restarts.
   SharingSwitch sharingOver(SharingLink link) => SharingSwitch(
     initial: settings.value.sharing ?? SharingState.initial,
@@ -115,12 +120,43 @@ Future<void> main(List<String> args) async {
     await _advertise(pcLink, identity, settings, windowsName);
     // Copies cross both ways while sharing is on; one that reaches the phone
     // flashes the tray.
+    final clipboard = ChannelClipboard();
     ClipBridge(
       link: pcLink,
-      clipboard: ChannelClipboard(),
+      clipboard: clipboard,
       sharing: () => pcSharing.on,
       onSent: (_) => shell?.flashSent(),
     ).start();
+    // Files from the phone: Downloads\Gotit, then on the clipboard ready to
+    // paste, with a toast. Refused while sharing is off.
+    final notices = PcNotices();
+    unawaited(notices.setup(localBuild: isLocalBuild(version)));
+    final link = pcLink;
+    transfers = Transfers(
+      link: link,
+      store: GatedStore(
+        FolderStore(() async {
+          final downloads = await getDownloadsDirectory();
+          return Directory(
+            '${downloads?.path ?? support.path}${Platform.pathSeparator}Gotit',
+          );
+        }),
+        open: () => pcSharing.on,
+      ),
+      onBatch: (files) {
+        final picture = files.length == 1 && files.single.isImage
+            ? files.single.location
+            : null;
+        unawaited(
+          clipboard.writeFiles([
+            for (final file in files) file.location,
+          ], picture: picture),
+        );
+        unawaited(
+          notices.received(files, from: link.state.phone?.name ?? 'your phone'),
+        );
+      },
+    )..start();
   } else {
     final pcFinder = BonsoirPcFinder();
     finder = pcFinder;
@@ -145,18 +181,33 @@ Future<void> main(List<String> args) async {
     final link = phoneLink;
     final setup = ChannelPhoneSetup();
     phoneSetup = setup;
+    // Files: sent from the share sheet. Receiving them comes in M4b, so for
+    // now every file from the PC is refused and the PC stops at once.
+    final phoneTransfers = Transfers(
+      link: link,
+      store: GatedStore(null, open: () => false),
+    )..start();
+    transfers = phoneTransfers;
     final notice = NoticeKeeper(
       states: link.states,
       current: () => link.state,
       notice: const ChannelLinkNotice(),
       watcher: setup.watcherChanges,
       sharing: phoneSharing,
+      transfers: phoneTransfers,
     )..start();
-    ClipBridge(
+    final bridge = ClipBridge(
       link: phoneLink,
       clipboard: ChannelClipboard(),
       sharing: () => phoneSharing.on,
       onSent: (_) => notice.sent(),
+    )..start();
+    // Share > Gotit: files, and links or text.
+    PhoneShareTarget(
+      link: link,
+      transfers: phoneTransfers,
+      sharing: phoneSharing,
+      bridge: bridge,
     ).start();
   }
 
@@ -174,6 +225,7 @@ Future<void> main(List<String> args) async {
         finder: finder,
         phoneSetup: phoneSetup,
         sharing: sharing,
+        transfers: transfers,
       ),
     ),
   );

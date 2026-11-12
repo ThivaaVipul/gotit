@@ -347,6 +347,30 @@ Each milestone gets a short grilling of its details before code.
   - phone: the share sheet;
   - PC: drag onto the window, Send to and the hotkey;
   - the `Downloads\Gotit` and `Download/Gotit` folders, progress, and sent images also on the clipboard.
+
+  Grilled 2026-11-12:
+  - **Phone:** Share > Gotit takes files, and links or text too (text lands on the PC's clipboard like a copy).
+  - **PC:** drag onto the window (folders zipped), Explorer's Send to > Gotit, or Ctrl+C the files in Explorer and press **Ctrl+Alt+G**.
+  - **The other device away:** said at once ("<name> isn't connected") and nothing waits; a cold start gets a few seconds to link first. Sharing off offers "Turn on and send".
+  - **Arriving on the PC:** `Downloads\Gotit`, an Open toast, and on the clipboard as files ready for Ctrl+V (an image also as a picture).
+  - **Arriving on the phone:** `Download/Gotit`, a notice with Open and Share, and an image also on the clipboard.
+  - **No size limit,** progress with Cancel, several files one after another; a clashing name becomes "name (1).ext".
+
+  Plan, in two pull requests, each a release:
+  - **M4a, phone to PC (v0.9.0):**
+    - the link: an outbox that waits for each file chunk to leave, reading paused while a slow disk catches up, and the link version 3;
+    - `lib/core/transfer/`: `file.offer` (id, name, size, batch), 256 KiB `file.chunk`s, `file.done` with SHA-256, `file.cancel`; names cleaned so they can't leave the folder; plain Dart, tested over localhost;
+    - phone: a share target for files and text, files read through Kotlin in chunks (no copy first), progress and Cancel in the ongoing notification, and the away and off answers;
+    - PC: `Downloads\Gotit`, the clipboard as files (`CF_HDROP`, plus the picture for an image), an Open toast (`local_notifier`, else `flutter_local_notifications`), and transfers with progress and Cancel on home.
+    - **Checked on the phone and this PC on 2026-11-12** with test builds. All of these worked:
+      - a photo, and several at once: in `Downloads\Gotit`, on the clipboard as files (a single photo also as a picture), and a toast naming the phone;
+      - a 200 MB file arriving intact at about 5 MB/s, faster than `adb push` on the same Wi-Fi (3.8 MB/s): with both devices on Wi-Fi, every byte crosses the air twice;
+      - Cancel in the phone's notification, leaving nothing on the PC;
+      - a shared link landing on the PC's clipboard;
+      - "Turn on and send" while sharing was off, and "<PC> isn't connected" with the PC closed.
+
+      Found and fixed: the phone said nothing when files started on their way (the notification was easy to miss, so the same photos were shared three times), so it now shows "Sending 2 files to <PC>"; a toast for several files had two buttons doing the same thing; and the phone now reads the next piece while one is sent. Windows kept the toasts in the notification centre without popping them up, which is Windows' Do not disturb rather than Gotit. 153 tests pass and analysis is clean.
+  - **M4b, PC to phone (v0.10.0):** drag and drop (`desktop_drop` 0.8.4), Send to (the installer's SendTo shortcut), Ctrl+Alt+G (`RegisterHotKey` and the copied file list in the runner), folders zipped (`archive`); phone saving to `Download/Gotit` through MediaStore, its notice with Open and Share, and images on the clipboard.
 - [ ] **M5 Recent list and polish:**
   - the recent list on both sides;
   - the Open button for links;
@@ -416,3 +440,4 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-11: M2d grilled (plain on/off, the tile offered once in the checklist), built and checked on both devices. With it, M2 is done.
 - 2026-11-11: M3 grilled: images both ways up to 25 MB, and phone screenshots to the PC, on by default.
 - 2026-11-12: M3 built and checked on both devices, from a fresh install on the phone.
+- 2026-11-12: M4 grilled (hotkey Ctrl+Alt+G, nothing waits for a device that is away, shared text too, files on the PC clipboard) and split in two; M4a (phone to PC) built and checked on both devices.

@@ -10,6 +10,8 @@ import 'package:gotit/core/link/peer.dart';
 import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/link/protocol.dart';
 import 'package:gotit/core/sharing/sharing.dart';
+import 'package:gotit/core/transfer/folder_store.dart';
+import 'package:gotit/core/transfer/transfers.dart';
 
 /// The two ends of the link, talking real TLS over localhost.
 class Pair {
@@ -360,6 +362,42 @@ void main() {
     expect(atPc.single.image, png);
   });
 
+  test('a big file crosses to a slow disk, and the link stays up', () async {
+    final dir = Directory.systemTemp.createTempSync('gotit_link_files_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    await startPc(phone: link.phoneAsPeer);
+    final ph = phone(pc: link.pcAsPeer);
+    final arrived = <ReceivedFile>[];
+    final atPc = Transfers(
+      link: link.pc,
+      store: _SlowStore(FolderStore(() async => dir)),
+      onBatch: arrived.addAll,
+    )..start();
+    final fromPhone = Transfers(link: ph, store: FolderStore(() async => dir))
+      ..start();
+    ph.start();
+    await until(() => ph.linked && link.pc.linked);
+
+    final source = File('${dir.path}${Platform.pathSeparator}source.bin');
+    final bytes = Uint8List.fromList(
+      List.generate(12 * 1024 * 1024 + 123, (i) => (i * 31) & 0xff),
+    );
+    source.writeAsBytesSync(bytes);
+    final result = await fromPhone.send([PathFile(source.path)]);
+    expect(result, SendResult.sent);
+    await until(() => arrived.isNotEmpty);
+    expect(arrived.single.name, 'source (1).bin');
+    expect(File(arrived.single.location).readAsBytesSync(), bytes);
+
+    // Still a working link afterwards.
+    final atPhone = <Clip>[];
+    ph.clips.listen(atPhone.add);
+    expect(link.pc.sendClip(Clip(text: 'after the file')), isTrue);
+    await until(() => atPhone.isNotEmpty);
+    await atPc.stop();
+    await fromPhone.stop();
+  });
+
   test('copies cross both ways once linked, and not before', () async {
     await startPc(phone: link.phoneAsPeer);
     final ph = phone(pc: link.pcAsPeer);
@@ -388,4 +426,33 @@ void main() {
     expect(atPc.single.text, 'from the phone');
     expect(atPc.single.sensitive, isFalse);
   });
+}
+
+/// A disk that takes its time, so the receiving side falls behind.
+class _SlowStore implements FileStore {
+  _SlowStore(this.inner);
+
+  final FileStore inner;
+
+  @override
+  Future<IncomingFile> create(String name, int size) async =>
+      _SlowFile(await inner.create(name, size));
+}
+
+class _SlowFile implements IncomingFile {
+  _SlowFile(this.inner);
+
+  final IncomingFile inner;
+
+  @override
+  Future<void> add(List<int> bytes) async {
+    await Future<void>.delayed(const Duration(milliseconds: 4));
+    await inner.add(bytes);
+  }
+
+  @override
+  Future<ReceivedFile> keep() => inner.keep();
+
+  @override
+  Future<void> discard() => inner.discard();
 }

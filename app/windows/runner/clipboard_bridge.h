@@ -27,12 +27,16 @@ class ClipboardBridge {
   void OnClipboardChanged();
   bool Write(const std::string& utf8, bool sensitive);
   bool WriteImage(const std::vector<uint8_t>& png);
+  bool WriteFiles(const std::vector<std::wstring>& paths,
+                  const std::wstring& picture);
 
   HWND window_;
   // Marks Gotit's own writes, so they are never reported as new copies.
   UINT own_format_;
   // Images as PNG, which browsers and Office use and which keeps alpha.
   UINT png_format_;
+  // With files: copy them where they are pasted, don't move them.
+  UINT drop_effect_format_;
   // Set by password managers: "clipboard watchers, look away".
   UINT exclude_format_;
   // A DWORD; 0 keeps a copy out of Windows clipboard history.

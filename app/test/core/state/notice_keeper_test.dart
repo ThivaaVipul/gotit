@@ -7,16 +7,25 @@ import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/notice_keeper.dart';
+import 'package:gotit/core/transfer/transfers.dart';
 
 class FakeNotice implements LinkNotice {
   final shown = <(String, String?)>[];
   final sharing = <bool>[];
+  final progress = <(int?, String?)>[];
   int hidden = 0;
 
   @override
-  Future<bool> show(String title, {String? text, bool sharing = true}) async {
+  Future<bool> show(
+    String title, {
+    String? text,
+    bool sharing = true,
+    int? percent,
+    String? cancel,
+  }) async {
     shown.add((title, text));
     this.sharing.add(sharing);
+    progress.add((percent, cancel));
     return true;
   }
 
@@ -133,6 +142,35 @@ void main() {
 
     await kept.stop();
     sharing.dispose();
+  });
+
+  test('a file being sent shows its progress and Cancel, then Sent', () async {
+    final files = ValueNotifier<List<Transfer>>(const []);
+    final kept = NoticeKeeper(
+      states: states.stream,
+      current: () => current,
+      notice: notice,
+      transfers: files,
+    )..start();
+    await change(const PhoneLinkState(pc: _pc, connection: Connection.online));
+
+    const sending = Transfer(
+      id: 't1',
+      name: 'video.mp4',
+      size: 1000,
+      direction: TransferDirection.sending,
+      bytes: 250,
+    );
+    files.value = [sending];
+    expect(notice.shown.last, ('Sending to Desk PC', 'video.mp4'));
+    expect(notice.progress.last, (25, 't1'));
+
+    files.value = [sending.copyWith(status: TransferStatus.done, bytes: 1000)];
+    expect(notice.shown.last, ('Connected to Desk PC', 'Sent to Desk PC'));
+    expect(notice.progress.last, (null, null));
+
+    await kept.stop();
+    files.dispose();
   });
 
   test('does not repeat itself', () async {
