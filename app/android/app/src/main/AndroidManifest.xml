@@ -9,6 +9,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- New screenshots to the PC: Gotit opens only new files in a
+         Screenshots folder. Android 13 and later ask for photos only. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
     <!-- No cloud backup: the device key lives in the Keystore and can't be
          restored elsewhere, so a restored pairing would only half work. -->
@@ -83,6 +89,12 @@
             android:name=".LinkService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+        <!-- Serves an image from the PC to apps that paste it, read-only. -->
+        <provider
+            android:name=".ClipProvider"
+            android:authorities="app.gotit.clips"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <!-- Serves a downloaded update to Android's installer, read-only, one APK name only. -->
         <provider
             android:name=".ApkProvider"

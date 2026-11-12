@@ -61,6 +61,8 @@ class SetupCubit extends Cubit<SetupStatus?> {
     await refresh();
   }
 
+  Future<void> askPhotos() => _setup.askPhotos();
+
   Future<void> addTile() async {
     await _setup.addTile();
     await refresh();

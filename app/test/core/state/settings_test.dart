@@ -42,6 +42,17 @@ void main() {
     expect(again.value.sharing, off);
   });
 
+  test(
+    'screenshots go to the PC unless turned off, and that is kept',
+    () async {
+      final store = await SettingsStore.open(file);
+      expect(store.value.sendsScreenshots, isTrue);
+      await store.save(store.value.copyWith(screenshots: () => false));
+      final again = await SettingsStore.open(file);
+      expect(again.value.sendsScreenshots, isFalse);
+    },
+  );
+
   test('a damaged file gives the defaults', () async {
     file.writeAsStringSync('{not json');
     final store = await SettingsStore.open(file);

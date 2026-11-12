@@ -128,7 +128,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - Forget on either side sends `bye`, and the other side forgets too.
 - **Frames** (`frame.dart`):
   - Each frame is a 4-byte header length, a JSON header whose `t` is the type, a 4-byte body length, and the body.
-  - Headers are capped at 64 KiB and bodies at 2 MiB. Anything malformed ends the connection.
+  - Headers are capped at 64 KiB and bodies at 26 MiB (a 25 MiB image with room to spare; 2 MiB until M3, which moved the link to version 2). Anything malformed ends the connection.
 
   | Frame | Carries |
   | --- | --- |
@@ -136,11 +136,11 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   | `hello` | device ID, name and link version |
   | `bye` | the other side forgot this pairing |
   | `ping`, `pong` | liveness |
-  | `switch` (M2d) | on or off, when it changed, which device changed it |
-  | `clip` (M2c, M3) | text or PNG image, copied-at time, a sensitive flag, a link flag |
+  | `sharing` (M2d) | the switch: on or off, when it changed, which device changed it |
+  | `clip` (M2c, M3) | `kind` text or image, copied-at time, a sensitive flag; the body is the UTF-8 text or the PNG |
   | `file.offer`, `file.chunk`, `file.done` (SHA-256), `file.cancel` (M4) | a file in 256 KiB chunks |
 
-  Text clips are capped at 1 MiB. A bigger image goes as a file.
+  Text clips are capped at 1 MiB and images at 25 MiB. A bigger one stays where it was copied (M4 may send it as a file).
 - **Live only:** nothing is queued. A copy made while the two aren't connected is dropped (PLAN decision).
 - **Echo guard:** the receiving side remembers the fingerprint of each clip it writes. When its own watcher then sees that change, it doesn't send it back. On Windows, Gotit's own writes also carry a private clipboard format.
 
@@ -174,8 +174,9 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - **The checklist** reads the watcher's state. On Android 13 and later the switch may be greyed out until "Allow restricted settings" is chosen in App info. Apps can't read that setting (asking throws a `SecurityException`), so while the watcher is switched off the checklist offers App info, with a hint until the watcher has run once. Autostart (MIUI's list in its Security app) and the lock are Xiaomi only, and you mark them done yourself, since no app can read them.
   - **A dead watcher:** a swipe-away without Autostart force-stops the app. Android then either marks the service as crashed (switched on, not running; seen in M0) or switches it off altogether (seen in M2c2). Gotit spots both: switched on but not running 20 seconds after the process started, or switched off after it had run. It says so in the ongoing notification and the checklist, and opens the switch in one tap.
   - **The Send button:** the notification's Send button always works, through the invisible activity.
-- **PC to phone (copies):** the link task writes the clipboard from the service. Text goes in as plain text. An image is saved to the app's cache, and its content URI is put on the clipboard through a `FileProvider`, so apps that accept images can paste it.
-- **Screenshots:** a `ContentObserver` on MediaStore picks up new files in the Screenshots folder (photo access: `READ_MEDIA_IMAGES`) and sends each one as an image clip.
+- **PC to phone (copies):** Dart writes the clipboard through the clipboard channel, also in the background. Text goes in as plain text. An image is saved to the app's cache (only the latest is kept) and put on the clipboard as a content URI from `ClipProvider` (`app.gotit.clips`, read-only, Gotit's own file names only), so apps that accept pasted images can read it. Both carry the label "Gotit", so the watcher never sends them back.
+- **Phone to PC (images):** a copied image is a content URI on the clipboard. Read during the same moment of focus, it is turned into PNG off the main thread (passed through when it already is one), and skipped above 25 MiB or 24 million pixels, which could never fit and could run the phone out of memory.
+- **Screenshots:** a `ContentObserver` on MediaStore notices library changes; Gotit then looks at the newest finished (`IS_PENDING` 0) image whose `RELATIVE_PATH` has a Screenshots folder, and sends it once, as PNG, if it is under 20 seconds old. It needs Photos access (`READ_MEDIA_IMAGES`, or `READ_EXTERNAL_STORAGE` before Android 13), asked for in the checklist, and does nothing while unpaired, while sharing is off, or with its Settings switch off.
 - **Files:**
   - Sending: a transparent share target activity receives the share sheet's items and passes their content URIs to the link task, which streams them.
   - Receiving: received files go to `Download/Gotit` through MediaStore, with no storage permission needed. A notification offers Open and Share.
@@ -193,7 +194,8 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - **Updates:** the self-update passes `/RUNARGS=--hidden` to the setup when Gotit was in the tray, so the new version starts there too.
 - **Clipboard:** a small C++ plugin in the runner.
   - It listens with `AddClipboardFormatListener` (`WM_CLIPBOARDUPDATE`).
-  - It reads text (`CF_UNICODETEXT`), images (the `PNG` format, or `CF_DIBV5` converted to PNG with WIC) and file lists (`CF_HDROP`), and writes text and images back.
+  - It reads text (`CF_UNICODETEXT`) first, so copying cells or a document sends text. Otherwise an image: the registered `PNG` format as it is (it keeps transparency), or `CF_BITMAP`, which Windows makes from any bitmap format, encoded to PNG with WIC (`image_codec.cpp`). File lists (`CF_HDROP`) come in M4.
+  - It writes text, or an image as both `PNG` and a 32-bit `CF_DIB` decoded with WIC, so browsers, Office and Paint can all paste it.
   - A copy carrying `ExcludeClipboardContentFromMonitorProcessing`, or with `CanIncludeInClipboardHistory` set to 0, counts as sensitive and still crosses (the PLAN decision that passwords cross wins over the mark).
   - No Rust and no extra packages.
 - **Sending files:**

@@ -35,6 +35,8 @@ class SetupStatus {
     this.locked = false,
     this.tileSupported = false,
     this.tile = false,
+    this.screenshots = false,
+    this.photos = false,
     this.maker = '',
   });
 
@@ -66,6 +68,11 @@ class SetupStatus {
   final bool tileSupported;
   final bool tile;
 
+  /// Whether new screenshots go to the PC (a Settings switch), and whether
+  /// Android lets Gotit open them (Photos access).
+  final bool screenshots;
+  final bool photos;
+
   /// The phone's maker, for steps only some makers need.
   final String maker;
 
@@ -75,7 +82,8 @@ class SetupStatus {
       battery &&
       watcher == WatcherState.on &&
       (!xiaomi || (autostart && locked)) &&
-      (!tileSupported || tile);
+      (!tileSupported || tile) &&
+      (!screenshots || photos);
 
   bool get xiaomi {
     final m = maker.toLowerCase();
@@ -110,6 +118,10 @@ abstract interface class PhoneSetup {
   /// answered.
   Future<void> addTile();
 
+  /// Android's Photos prompt, or Gotit's permissions page once it was
+  /// answered.
+  Future<void> askPhotos();
+
   /// The copy watcher started or stopped.
   Stream<WatcherState> get watcherChanges;
 }
@@ -140,6 +152,8 @@ class ChannelPhoneSetup implements PhoneSetup {
       locked: map['locked'] == true,
       tileSupported: map['tileSupported'] == true,
       tile: map['tile'] == true,
+      screenshots: map['screenshots'] == true,
+      photos: map['photos'] == true,
       maker: map['maker'] as String? ?? '',
     );
   }
@@ -166,6 +180,9 @@ class ChannelPhoneSetup implements PhoneSetup {
 
   @override
   Future<void> addTile() => _setup.invokeMethod<void>('tile');
+
+  @override
+  Future<void> askPhotos() => _window.invokeMethod<void>('photos');
 
   @override
   Stream<WatcherState> get watcherChanges => _watcher.stream;

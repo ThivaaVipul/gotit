@@ -2,7 +2,8 @@
 abstract final class LinkSpec {
   /// Bumped whenever the two sides would no longer understand each other.
   /// A mismatch shows "Update Gotit" on both, and nothing crosses.
-  static const version = 1;
+  /// 2: image clips, in frames bigger than version 1 accepts.
+  static const version = 2;
 
   /// The mDNS service the PC advertises and the phone looks for.
   static const serviceType = '_gotit._tcp';
@@ -47,8 +48,8 @@ abstract final class Frames {
   /// Both ways, on a paired link: the other side forgot this pairing.
   static const bye = 'bye';
 
-  /// Both ways, on a paired link: something copied. kind (text), sensitive,
-  /// at; the text is the body.
+  /// Both ways, on a paired link: something copied. kind (text or image),
+  /// sensitive, at; the body is the text (UTF-8) or the image (PNG).
   static const clip = 'clip';
 
   /// Both ways, on a paired link: the sharing switch. on, at (when it was

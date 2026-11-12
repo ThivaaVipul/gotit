@@ -152,6 +152,13 @@ class _ChecklistView extends StatelessWidget {
                     onTap: () => unawaited(cubit.mark('locked')),
                   ),
                 ],
+                if (status.screenshots)
+                  SetupStep(
+                    label: 'Screenshots to PC',
+                    done: status.photos,
+                    action: 'Allow',
+                    onTap: () => unawaited(cubit.askPhotos()),
+                  ),
                 if (status.tileSupported)
                   SetupStep(
                     label: 'Quick settings tile',

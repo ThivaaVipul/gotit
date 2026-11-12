@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
@@ -33,6 +34,10 @@ class MainActivity : FlutterActivity() {
                         askForNotifications()
                         result.success(null)
                     }
+                    "photos" -> {
+                        askForPhotos()
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -44,6 +49,8 @@ class MainActivity : FlutterActivity() {
         // A notification posted while notifications were off never shows,
         // so post it again on the way back from the prompt or settings.
         LinkService.repost()
+        // Photos access may have just been allowed.
+        Screenshots.start(this)
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -68,7 +75,21 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** For screenshots: Android's prompt the first time; Gotit's app info page after that. */
+    private fun askForPhotos() {
+        val prefs = getSharedPreferences("setup", MODE_PRIVATE)
+        if (!Screenshots.allowed(this) && !prefs.getBoolean(PHOTOS_ASKED, false)) {
+            prefs.edit().putBoolean(PHOTOS_ASKED, true).apply()
+            requestPermissions(arrayOf(Screenshots.permissionName()), 2)
+        } else {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+            )
+        }
+    }
+
     private companion object {
         const val ASKED = "notificationsAsked"
+        const val PHOTOS_ASKED = "photosAsked"
     }
 }

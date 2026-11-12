@@ -7,7 +7,8 @@ import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/state/settings.dart';
 
 /// Settings: the paired device and Forget on both; on the PC also its name
-/// and starting with Windows; on the phone the quick settings tile.
+/// and starting with Windows; on the phone screenshots to the PC and the
+/// quick settings tile.
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.services, super.key});
 
@@ -39,7 +40,12 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
             ],
-            if (services.phoneSetup case final setup?) _TileOffer(setup: setup),
+            if (services.phoneSetup case final setup?)
+              _PhoneSettings(
+                setup: setup,
+                services: services,
+                settings: settings,
+              ),
             if (services.isPc) ...[
               const _Section('This PC'),
               Card(
@@ -215,36 +221,63 @@ class _StartWithWindows extends StatelessWidget {
   }
 }
 
-/// The quick settings tile, on phones whose Android can offer to add it
-/// (Android 13 and later).
-class _TileOffer extends StatelessWidget {
-  const _TileOffer({required this.setup});
+/// The phone's own settings: new screenshots to the PC, and the quick
+/// settings tile where Android can offer to add it (Android 13 and later).
+class _PhoneSettings extends StatelessWidget {
+  const _PhoneSettings({
+    required this.setup,
+    required this.services,
+    required this.settings,
+  });
 
   final PhoneSetup setup;
+  final AppServices services;
+  final Settings settings;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<SetupStatus>(
-      future: setup.status(),
-      builder: (context, status) {
-        if (status.data?.tileSupported != true) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _Section('This phone'),
-            Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-                title: const Text('Quick settings tile'),
-                trailing: TextButton(
-                  onPressed: () => unawaited(setup.addTile()),
-                  child: const Text('Add'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Section('This phone'),
+        Card(
+          child: Column(
+            children: [
+              SwitchListTile(
+                contentPadding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
+                title: const Text('Screenshots to PC'),
+                value: settings.sendsScreenshots,
+                onChanged: (on) => unawaited(
+                  services.settings.save(
+                    services.settings.value.copyWith(screenshots: () => on),
+                  ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+              FutureBuilder<SetupStatus>(
+                future: setup.status(),
+                builder: (context, status) {
+                  if (status.data?.tileSupported != true) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    children: [
+                      const Divider(indent: 16, endIndent: 16),
+                      ListTile(
+                        contentPadding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                        title: const Text('Quick settings tile'),
+                        trailing: TextButton(
+                          onPressed: () => unawaited(setup.addTile()),
+                          child: const Text('Add'),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

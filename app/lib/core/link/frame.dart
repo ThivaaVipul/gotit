@@ -32,9 +32,10 @@ class Frame {
 }
 
 /// Header and body limits. A frame over either one ends the connection.
+/// The body fits the biggest image clip, 25 MiB, with room to spare.
 abstract final class FrameLimits {
   static const header = 64 * 1024;
-  static const body = 2 * 1024 * 1024;
+  static const body = 26 * 1024 * 1024;
 }
 
 Uint8List encodeFrame(Frame frame) {

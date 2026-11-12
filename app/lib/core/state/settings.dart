@@ -8,7 +8,13 @@ import 'package:gotit/core/sharing/sharing.dart';
 /// What the user chose. Empty fields mean "never set": the defaults apply.
 @immutable
 class Settings {
-  const Settings({this.pcName, this.startWithWindows, this.peer, this.sharing});
+  const Settings({
+    this.pcName,
+    this.startWithWindows,
+    this.peer,
+    this.sharing,
+    this.screenshots,
+  });
 
   /// The PC's name as the phone shows it. Empty means the Windows name.
   final String? pcName;
@@ -23,11 +29,18 @@ class Settings {
   /// The sharing switch as last known. Empty means on, never changed.
   final SharingState? sharing;
 
+  /// Whether new phone screenshots go to the PC (the phone only). Empty
+  /// means never decided, and the default (on) applies.
+  final bool? screenshots;
+
+  bool get sendsScreenshots => screenshots ?? true;
+
   Settings copyWith({
     ValueGetter<String?>? pcName,
     ValueGetter<bool?>? startWithWindows,
     ValueGetter<Peer?>? peer,
     ValueGetter<SharingState?>? sharing,
+    ValueGetter<bool?>? screenshots,
   }) => Settings(
     pcName: pcName != null ? pcName() : this.pcName,
     startWithWindows: startWithWindows != null
@@ -35,6 +48,7 @@ class Settings {
         : this.startWithWindows,
     peer: peer != null ? peer() : this.peer,
     sharing: sharing != null ? sharing() : this.sharing,
+    screenshots: screenshots != null ? screenshots() : this.screenshots,
   );
 
   Map<String, Object?> toJson() => {
@@ -42,6 +56,7 @@ class Settings {
     if (startWithWindows != null) 'startWithWindows': startWithWindows,
     if (peer != null) 'peer': peer!.toJson(),
     if (sharing != null) 'sharing': sharing!.toJson(),
+    if (screenshots != null) 'screenshots': screenshots,
   };
 
   factory Settings.fromJson(Map<String, Object?> json) => Settings(
@@ -51,6 +66,9 @@ class Settings {
         : null,
     peer: _peerFrom(json['peer']),
     sharing: SharingState.fromJson(json['sharing']),
+    screenshots: json['screenshots'] is bool
+        ? json['screenshots'] as bool
+        : null,
   );
 
   static Peer? _peerFrom(Object? json) {
@@ -68,10 +86,12 @@ class Settings {
       other.pcName == pcName &&
       other.startWithWindows == startWithWindows &&
       other.peer == peer &&
-      other.sharing == sharing;
+      other.sharing == sharing &&
+      other.screenshots == screenshots;
 
   @override
-  int get hashCode => Object.hash(pcName, startWithWindows, peer, sharing);
+  int get hashCode =>
+      Object.hash(pcName, startWithWindows, peer, sharing, screenshots);
 }
 
 /// Keeps [Settings] in a small JSON file and tells listeners when they change.
