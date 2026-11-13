@@ -12,6 +12,7 @@ import android.os.PersistableBundle
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import java.security.MessageDigest
 
 /** The phone's clipboard: text, and images. Nothing read or written is kept or logged. */
 object PhoneClipboard {
@@ -132,6 +133,16 @@ object PhoneClipboard {
         val clip = ClipData.newUri(context.contentResolver, LABEL, uri)
         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
     }
+
+    /** Empties the clipboard: a sensitive copy Gotit put there, its minute up. */
+    fun clear(context: Context) {
+        context.getSystemService(ClipboardManager::class.java).clearPrimaryClip()
+    }
+
+    /** [text]'s SHA-256 in hex, as Dart makes it: compared, never kept. */
+    fun sha256(text: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(text.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 
     private fun isPng(bytes: ByteArray) = bytes.size > 8 &&
         bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() &&

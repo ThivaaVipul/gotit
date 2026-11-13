@@ -1,7 +1,7 @@
 # Gotit plan
 
-Living document, updated as work proceeds. Last updated: 2026-11-10.
-Status: **M1 done (2026-11-10).** v0.1.1 updated both apps by themselves. **M2 grilled (2026-11-10). M2a, the look, shipped as v0.2.0; M2b1, the PC shell, is built.**
+Living document, updated as work proceeds. Last updated: 2026-11-13.
+Status: **M0 to M4 done; v0.10.0 is out.** **M5 grilled (2026-11-13); M5a (the recent list) built and checked on both devices.**
 
 Gotit shares what you copy between your Android phone and your Windows PC. Copy text or an image on one and it is ready to paste on the other; send files on purpose from either side. The two talk directly over the same Wi-Fi, with no server. Personal use, on free tools only.
 
@@ -388,11 +388,32 @@ Each milestone gets a short grilling of its details before code.
       - the phone's notice: Open (the gallery for a photo, a choice of apps for text), Open folder (the Files app), Share, and the photo pasting on the phone.
 
       Found and changed: another app on this PC already held Ctrl+Alt+G, so the hotkey is Ctrl+F2 (your pick), and the drop area says when another app holds it. 180 tests pass and analysis is clean.
-- [ ] **M5 Recent list and polish:**
-  - the recent list on both sides;
-  - the Open button for links;
-  - sensitive items shown as dots and dropped after a minute;
-  - a last polish pass.
+- [ ] **M5 Recent list and polish:** grilled 2026-11-13, in two pull requests:
+  - **M5a, the recent list, links and sensitive items (v0.11.0):**
+    - **One Recent card on home,** on both devices, with all 20 items: under the drop area on the PC, under the switch on the phone (an unfinished setup checklist stays above it). It takes over from the transfers card.
+    - **What it holds:** whatever crossed either way: text, links, images (screenshots too) and files. Copies that never crossed (the devices apart, or sharing off) aren't listed.
+    - **Files:** on their way they sit at the top with progress and Cancel; once done, a batch folds into one row ("IMG_0412.jpg and 11 more"). Failed or cancelled sends show for a moment and go.
+    - **Kept across restarts** in Gotit's own app folder: a small list file plus copies of images, about 100 MB of images at most (the oldest image rows leave first). Received files are only pointed at. Sensitive items are never written.
+    - **Tapping:** text, a link or an image goes back on this device's clipboard only (it doesn't cross again) and moves to the top. Links also have Open. Images show a thumbnail, with Share on the phone and Open on the PC. A received file opens (a batch opens its folder), with Share on the phone and Show in folder on the PC. A sent file shows in its folder on the PC; on the phone it is a record only, since Android lets Gotit read a shared file only during the share.
+    - **Removing:** one row (long-press on the phone, right-click on the PC), or Clear for all of them, each with a few seconds of Undo. Each device's list is its own, and files in Downloads are never deleted.
+    - **Links:** a copy that is just one web address gets a quiet notice on the receiving device, both ways: "Link from <device>" with Open. No sound, the newest replaces the last, and it goes after 5 minutes. Sensitive copies never get one. The PC's toast package can't make a silent toast, so this one is a small native toast in the runner.
+    - **Sensitive items:** dots in the list, copyable during their minute, then gone, and never written to disk. When the minute is up, Gotit also wipes the copy from the receiving clipboard if it is still the one Gotit put there. The phone checks with the copy watcher's invisible read, and skips the wipe while the watcher is off.
+    - **A mockup first:** one local HTML page outside the repo, like the look pass: the Recent card on both screens, light and dark, every kind of row, with the arrive and leave motion. Building starts once you pick or adjust.
+    - **Picked (2026-11-13): rows in one card** (of three styles: rows, tiles, compact lines). Hairlines between rows; each row has a 36 px icon or thumbnail, the name on the first line, then the direction, time and size; a trailing Open, Share, Show in folder or Cancel; a ring counting down a sensitive item's minute. The header reads "Recent" with Clear. Removing and Clear say so in a snackbar with Undo; the PC has a right-click menu and the phone a bottom sheet on a long press.
+    - **Built (2026-11-13):** `lib/core/recent` (the list, kept in `recent.json` with images in `recent/`; `RecentKeeper` for copying again and the wipe), transfers marked with their batch and folded into one item once over, the Recent card in place of the transfers card, a screenshot flag on image clips (older peers ignore it, so the link stays at version 3), a quiet link toast made in the Windows runner (the toast package always plays a sound), and on the phone a "links" notification channel, the wipe through the copy watcher's read, and Share for list images. Found while testing: a snackbar with an action now stays until tapped unless told otherwise, which would have left Undo showing after it stopped working. 225 tests pass and analysis is clean.
+    - **Checked on the phone and this PC on 2026-11-13** with test builds, the phone from a fresh install, so pairing and the checklist ran again. All of these worked:
+      - text, a link and a sensitive copy from the PC, listed on both sides; the link with a quiet notice on the phone (its own low-importance channel, no sound or vibration);
+      - the sensitive copy as dots with its ring on both sides, gone after its minute, and the phone's clipboard wiped then (the phone's log says "cleared"); a copy made on the phone before the minute was up was left alone;
+      - a link copied on the phone: a silent toast on the PC with Open, and Open in both lists;
+      - a phone screenshot listed as "Screenshot", 1080 x 2400, with its thumbnail, opening in Photos on the PC and shared from the phone;
+      - copying a row again (Copied, then at the top), and Remove and Clear with Undo, on both;
+      - three files from the PC with Ctrl+F2: progress, then one row "and 2 more"; a file shared from the phone opening on the PC and showing in Explorer;
+      - the list kept through a restart of each app.
+
+      Found and changed: the phone's wipe now logs its outcome (cleared, kept, or nothing read; never what was there), since checking by pasting was easily overtaken by a newer copy.
+  - **M5b, polish,** after a few days of using M5a:
+    - a review of both apps (the look against the Slate spec, contrast, touch targets, screen-reader labels, reduced motion, light and dark, long names, empty states), fixing what turns up, plus anything you add;
+    - one normal day's battery and connection check on the phone, read over wireless debugging at the start and end of the day with your OK: the two checks still open at the end of ARCHITECTURE.md.
 
 ## Risks
 
@@ -460,3 +481,6 @@ Each milestone gets a short grilling of its details before code.
 - 2026-11-12: M4 grilled (hotkey Ctrl+Alt+G, nothing waits for a device that is away, shared text too, files on the PC clipboard) and split in two; M4a (phone to PC) built and checked on both devices.
 - 2026-11-12: M4a merged (PR #13) and released as v0.9.0; both apps updated.
 - 2026-11-12: M4b (PC to phone) built and checked on both devices. Ctrl+Alt+G was taken by another app on this PC, so the hotkey became Ctrl+F2. Window drops are taken by the runner itself rather than `desktop_drop`, which would also have added a drag listener to the phone app. With it, M4 is done.
+- 2026-11-12: M4b merged (PR #14) and released as v0.10.0; the PC updated itself within minutes.
+- 2026-11-13: M5 grilled: one Recent card of 20 items on home, kept across restarts (sensitive items never written), files folded into one row per batch, copying again stays on this device, quiet link notices both ways, and sensitive copies wiped from the clipboard after their minute. Split into M5a (the list, links and sensitive items) and M5b (polish and a day's battery check), with a mockup of the list first.
+- 2026-11-13: The mockup's first style (rows in one card) picked. M5a built and checked on both devices, the phone from a fresh install.

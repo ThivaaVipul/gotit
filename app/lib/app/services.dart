@@ -5,6 +5,8 @@ import 'package:gotit/core/link/phone_link.dart';
 import 'package:gotit/core/platform/pc_files.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
+import 'package:gotit/core/recent/recent.dart';
+import 'package:gotit/core/recent/recent_actions.dart';
 import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/settings.dart';
 import 'package:gotit/core/transfer/transfers.dart';
@@ -25,6 +27,8 @@ class AppServices {
     this.phoneSetup,
     this.sharing,
     this.transfers,
+    this.recent,
+    this.recentActions,
     this.pcFiles,
     this.navigator,
   });
@@ -60,6 +64,10 @@ class AppServices {
 
   /// Files on their way, either way.
   final Transfers? transfers;
+
+  /// The last things that crossed, and what can be done with them.
+  final RecentList? recent;
+  final RecentActions? recentActions;
 
   /// Files dropped on the window, and Ctrl+F2 (the PC only).
   final PcFiles? pcFiles;

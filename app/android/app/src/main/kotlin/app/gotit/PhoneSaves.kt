@@ -76,6 +76,35 @@ object PhoneSaves {
                     call.argument<String>("uri")?.let { Arrivals.open(app, Uri.parse(it)) }
                     result.success(null)
                 }
+                // A link from the PC: a quiet notice with Open.
+                "link" -> {
+                    Links.show(
+                        app,
+                        title = call.argument<String>("title") ?: "Link",
+                        text = call.argument<String>("text") ?: "",
+                        url = call.argument<String>("url") ?: "",
+                    )
+                    result.success(null)
+                }
+                // The recent list's buttons.
+                "openLink" -> {
+                    call.argument<String>("url")?.let { Links.open(app, it) }
+                    result.success(null)
+                }
+                "openFolder" -> {
+                    Arrivals.openFolder(app)
+                    result.success(null)
+                }
+                "share" -> {
+                    Arrivals.share(app, call.argument<List<String>>("uris").orEmpty().map(Uri::parse))
+                    result.success(null)
+                }
+                "shareImage" -> {
+                    call.argument<String>("path")
+                        ?.let { ClipProvider.recentUri(app, java.io.File(it)) }
+                        ?.let { Arrivals.share(app, listOf(it)) }
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

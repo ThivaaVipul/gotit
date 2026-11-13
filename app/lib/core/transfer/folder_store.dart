@@ -111,4 +111,7 @@ class PathFile implements OutgoingFile {
 
   @override
   Stream<List<int>> read() => File(path).openRead();
+
+  @override
+  String? get source => path;
 }

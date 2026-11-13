@@ -12,6 +12,7 @@ class Clip {
     this.image,
     this.sensitive = false,
     this.manual = false,
+    this.screenshot = false,
     DateTime? at,
   }) : at = at ?? DateTime.now();
 
@@ -38,6 +39,9 @@ class Clip {
   /// Only this device knows: the flag isn't part of the frame.
   final bool manual;
 
+  /// A new phone screenshot rather than a copy (an image only).
+  final bool screenshot;
+
   /// When it was copied.
   final DateTime at;
 
@@ -52,6 +56,8 @@ class Clip {
     'kind': isImage ? 'image' : 'text',
     'sensitive': sensitive,
     'at': at.millisecondsSinceEpoch,
+    // Older peers ignore it.
+    if (screenshot) 'screenshot': true,
   }, image ?? Uint8List.fromList(utf8.encode(text)));
 
   /// The clip in [frame], or null when it isn't one this version understands.
@@ -70,7 +76,12 @@ class Clip {
         }
       case 'image':
         if (body.isEmpty) return null;
-        return Clip(image: body, sensitive: sensitive, at: when);
+        return Clip(
+          image: body,
+          sensitive: sensitive,
+          screenshot: frame.fields['screenshot'] == true,
+          at: when,
+        );
       default:
         return null;
     }

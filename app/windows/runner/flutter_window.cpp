@@ -30,6 +30,8 @@ bool FlutterWindow::OnCreate() {
   files_ = std::make_unique<FilesBridge>(
       flutter_controller_->engine()->messenger(), GetHandle(),
       flutter_controller_->view()->GetNativeWindow());
+  notices_ = std::make_unique<NoticesBridge>(
+      flutter_controller_->engine()->messenger(), GetHandle());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   // The window stays hidden here: Dart shows it (window_manager), unless
@@ -45,6 +47,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  notices_ = nullptr;
   files_ = nullptr;
   clipboard_ = nullptr;
   if (flutter_controller_) {
@@ -77,6 +80,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
     case WM_HOTKEY:
       if (files_ && files_->HandleMessage(message, wparam)) return 0;
+      break;
+    case NoticesBridge::kOpenMessage:
+      if (notices_ && notices_->HandleMessage(message, lparam)) return 0;
       break;
   }
 

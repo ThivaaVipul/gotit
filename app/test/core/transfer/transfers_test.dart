@@ -94,6 +94,9 @@ class MemoryFile implements OutgoingFile {
   int get size => bytes.length;
 
   @override
+  String? get source => '/from/$name';
+
+  @override
   Stream<List<int>> read() async* {
     var index = 0;
     for (var at = 0; at < bytes.length; at += piece) {
@@ -119,6 +122,9 @@ class MadeFile implements PreparedFile {
 
   @override
   int get size => made ? bytes.length : -1;
+
+  @override
+  String? get source => '/folder/$name';
 
   @override
   Future<void> prepare() async {
@@ -154,6 +160,8 @@ void main() {
   late Transfers phone;
   late Transfers pc;
   late List<List<ReceivedFile>> batches;
+  late List<String> batchIds;
+  late List<(List<SentFile>, String)> sentBatches;
 
   setUp(() {
     phoneEnd = FakeFileLink();
@@ -162,12 +170,22 @@ void main() {
     pcEnd.peer = phoneEnd;
     store = MemoryStore();
     batches = [];
+    batchIds = [];
+    sentBatches = [];
     phone = Transfers(
       link: phoneEnd,
       store: MemoryStore(),
       chunkSize: 64 * 1024,
+      onSent: (files, batch) => sentBatches.add((files, batch)),
     )..start();
-    pc = Transfers(link: pcEnd, store: store, onBatch: batches.add)..start();
+    pc = Transfers(
+      link: pcEnd,
+      store: store,
+      onBatch: (files, batch) {
+        batches.add(files);
+        batchIds.add(batch);
+      },
+    )..start();
   });
 
   tearDown(() async {
@@ -183,9 +201,56 @@ void main() {
     expect(result, SendResult.sent);
     expect(store.kept['notes.txt'], bytes);
     expect(batches.single.single.name, 'notes.txt');
-    expect(phone.value.single.status, TransferStatus.done);
-    expect(pc.value.single.status, TransferStatus.done);
-    expect(pc.value.single.direction, TransferDirection.receiving);
+    // Over and handed over: the rows leave the list on both sides.
+    expect(phone.value, isEmpty);
+    expect(pc.value, isEmpty);
+  });
+
+  test('a batch is handed over on both sides under one id', () async {
+    await phone.send([
+      MemoryFile('a.txt', _bytes(10, 1)),
+      MemoryFile('b.txt', _bytes(20, 2)),
+    ]);
+    final (files, batch) = sentBatches.single;
+    expect(files.map((f) => f.name), ['a.txt', 'b.txt']);
+    expect(files.map((f) => f.size), [10, 20]);
+    expect(files.map((f) => f.source), ['/from/a.txt', '/from/b.txt']);
+    expect(batchIds.single, batch);
+  });
+
+  test(
+    'a file that went stays listed, done, until its batch is over',
+    () async {
+      late List<Transfer> midway;
+      final second = MemoryFile(
+        'b.bin',
+        _bytes(300 * 1024, 2),
+        gate: (index) async {
+          if (index == 1) midway = pc.value;
+        },
+      );
+      await phone.send([MemoryFile('a.txt', _bytes(10, 1)), second]);
+      expect(midway.map((t) => t.status), [
+        TransferStatus.done,
+        TransferStatus.running,
+      ]);
+      expect(midway.map((t) => t.batch).toSet(), hasLength(1));
+      expect(pc.value, isEmpty);
+    },
+  );
+
+  test('a failed row leaves after a moment', () async {
+    final quick = Transfers(
+      link: pcEnd,
+      store: store,
+      keepFailed: const Duration(milliseconds: 20),
+    )..start();
+    store.full = true;
+    await phone.send([MemoryFile('a.bin', _bytes(10))]);
+    expect(quick.value.single.status, TransferStatus.failed);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(quick.value, isEmpty);
+    await quick.stop();
   });
 
   test('files sent together arrive as one batch', () async {
@@ -299,7 +364,11 @@ void main() {
     expect(folder.disposed, 1);
     expect(store.kept['docs.zip'], folder.bytes);
     expect(batches.single.map((f) => f.name), ['a.txt', 'docs.zip']);
-    expect(phone.value.map((t) => t.status), everyElement(TransferStatus.done));
+    expect(phone.value, isEmpty);
+    expect(sentBatches.single.$1.map((f) => f.source), [
+      '/from/a.txt',
+      '/folder/docs.zip',
+    ]);
   });
 
   test('a folder that cannot be made sends nothing of its batch', () async {

@@ -58,6 +58,12 @@ Name: "{usersendto}\Gotit"; Filename: "{app}\gotit.exe"; Parameters: "--send"
 ; This entry creates nothing; it only removes that value on uninstall.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Gotit"; Flags: uninsdeletevalue
 
+[UninstallDelete]
+; The recent list holds what was copied, so it leaves with the app. Pairing
+; and settings stay beside it, for a reinstall.
+Type: files; Name: "{userappdata}\Gotit\Gotit\recent.json"
+Type: filesandordirs; Name: "{userappdata}\Gotit\Gotit\recent"
+
 [Run]
 ; A self-update passes /RUNARGS=--hidden when Gotit was in the tray, so the new
 ; version starts there too instead of opening its window.

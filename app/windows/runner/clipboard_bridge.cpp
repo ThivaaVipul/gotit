@@ -75,6 +75,12 @@ bool DwordIsZero(UINT format) {
   return zero;
 }
 
+// The clipboard's sequence number, which changes with every write to it.
+flutter::EncodableValue SequenceNumber() {
+  return flutter::EncodableValue(
+      static_cast<int64_t>(GetClipboardSequenceNumber()));
+}
+
 int64_t NowMillis() {
   using namespace std::chrono;
   return duration_cast<milliseconds>(system_clock::now().time_since_epoch())
@@ -100,6 +106,22 @@ ClipboardBridge::ClipboardBridge(flutter::BinaryMessenger* messenger,
       [this](const flutter::MethodCall<flutter::EncodableValue>& call,
              std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
                  result) {
+        if (call.method_name() == "wipe") {
+          const auto* args =
+              std::get_if<flutter::EncodableMap>(call.arguments());
+          auto sequence =
+              args ? args->find(flutter::EncodableValue("sequence"))
+                   : flutter::EncodableMap::const_iterator();
+          if (!args || sequence == args->end() ||
+              !(std::holds_alternative<int32_t>(sequence->second) ||
+                std::holds_alternative<int64_t>(sequence->second))) {
+            result->Error("args", "No sequence");
+            return;
+          }
+          result->Success(flutter::EncodableValue(
+              Wipe(static_cast<DWORD>(sequence->second.LongValue()))));
+          return;
+        }
         const bool files = call.method_name() == "writeFiles";
         if (!files && call.method_name() != "write") {
           result->NotImplemented();
@@ -145,7 +167,7 @@ ClipboardBridge::ClipboardBridge(flutter::BinaryMessenger* messenger,
           if (!png || png->empty()) {
             result->Error("args", "No image");
           } else if (WriteImage(*png)) {
-            result->Success();
+            result->Success(SequenceNumber());
           } else {
             result->Error("busy", "The clipboard is in use");
           }
@@ -162,7 +184,7 @@ ClipboardBridge::ClipboardBridge(flutter::BinaryMessenger* messenger,
                             std::holds_alternative<bool>(sensitive->second) &&
                             std::get<bool>(sensitive->second);
         if (Write(std::get<std::string>(text->second), is_sensitive)) {
-          result->Success();
+          result->Success(SequenceNumber());
         } else {
           result->Error("busy", "The clipboard is in use");
         }
@@ -288,6 +310,18 @@ bool ClipboardBridge::WriteFiles(const std::vector<std::wstring>& paths,
   Put(own_format_, CopyToGlobal(&mark, sizeof(mark)));
   CloseClipboard();
   return true;
+}
+
+bool ClipboardBridge::Wipe(DWORD sequence) {
+  // Something copied since changed the number: it stays.
+  if (GetClipboardSequenceNumber() != sequence) return false;
+  if (!OpenWithRetry(window_)) return false;
+  // Checked again while open, so nothing can slip in between.
+  const bool ours = GetClipboardSequenceNumber() == sequence &&
+                    IsClipboardFormatAvailable(own_format_);
+  if (ours) EmptyClipboard();
+  CloseClipboard();
+  return ours;
 }
 
 bool ClipboardBridge::Write(const std::string& utf8, bool sensitive) {

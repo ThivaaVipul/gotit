@@ -23,5 +23,7 @@
     <string name="files_open_folder">Open folder</string>
     <string name="files_share">Share</string>
     <string name="files_no_app">No app can open it</string>
+    <string name="links_channel">Links from your PC</string>
+    <string name="link_open">Open</string>
     <string name="watcher_description">Notices when you copy something on this phone, so Gotit can send it to your PC. It reads the clipboard only right after a copy, and keeps nothing.\n\nTurn on the main switch. The shortcut isn\'t needed.</string>
 </resources>

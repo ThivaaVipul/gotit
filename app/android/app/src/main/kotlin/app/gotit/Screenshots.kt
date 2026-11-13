@@ -90,7 +90,7 @@ object Screenshots {
             return
         }
         Log.d(TAG, "screenshot: new, ${png.size / 1024} KB")
-        Channels.copiedImage(png, shot.addedSeconds * 1000, manual = false)
+        Channels.copiedImage(png, shot.addedSeconds * 1000, manual = false, screenshot = true)
     }
 
     /** The newest image in a Screenshots folder that has finished being written. */

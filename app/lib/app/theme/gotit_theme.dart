@@ -158,5 +158,39 @@ ThemeData gotitTheme(Brightness brightness) {
       trackOutlineColor: const WidgetStatePropertyAll(Color(0x00000000)),
     ),
     iconTheme: IconThemeData(color: c.muted, size: 20),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: c.fg,
+      elevation: 0,
+      contentTextStyle: TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 14,
+        color: c.bg,
+      ),
+      // Readable on the inverted bar: the light theme's accent on a light
+      // bar, a pale indigo on a dark one.
+      actionTextColor: dark ? const Color(0xFF4F5BEF) : const Color(0xFFA9B0FF),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GotitRadius.control),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: c.surface,
+      surfaceTintColor: const Color(0x00000000),
+      elevation: 6,
+      textStyle: TextStyle(fontFamily: 'Inter', fontSize: 14, color: c.fg),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GotitRadius.control),
+        side: BorderSide(color: c.line),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: c.surface,
+      surfaceTintColor: const Color(0x00000000),
+      dragHandleColor: c.muted.withValues(alpha: 0.45),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+    ),
   );
 }

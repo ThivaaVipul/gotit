@@ -30,7 +30,7 @@ Dart tests mirror `lib/` under `app/test/`. Build output (`app/build/`, `dist/`)
 ## Architecture rules
 
 - Shared Dart lives in `lib/core/`. The link (discovery, pairing, session, protocol), clips, transfers and the switch are plain Dart with no Flutter imports where possible, and are tested without devices (two link ends over localhost TLS in one test).
-- Native code is kept to what Dart can't do: on Android (Kotlin) the copy watcher (an accessibility service), clipboard writes, the share target, MediaStore downloads, screenshots and the quick settings tile; on Windows (C++ in the runner) the clipboard listener and formats, file drops on the window and the Ctrl+F2 hotkey.
+- Native code is kept to what Dart can't do: on Android (Kotlin) the copy watcher (an accessibility service), clipboard writes and wipes, the share target, MediaStore downloads, screenshots, link notices and the quick settings tile; on Windows (C++ in the runner) the clipboard listener and formats, file drops on the window, the Ctrl+F2 hotkey and quiet toasts for links.
 - Same network only: devices talk directly, no server, no account. Nothing is queued while they're apart.
 - Logs never hold what was copied: lengths, kinds and timings only.
 - The copy watcher polls the screen only in apps that don't report taps, and only while the screen is on. Everything else is event-driven.

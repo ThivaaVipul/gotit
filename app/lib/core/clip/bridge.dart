@@ -16,8 +16,15 @@ abstract interface class DeviceClipboard {
   /// Copies made on this device.
   Stream<Clip> get copies;
 
-  /// Puts a clip from the other device on this one's clipboard.
-  Future<void> write(Clip clip);
+  /// Puts [clip] on this device's clipboard (one from the other device, or
+  /// one copied again from the recent list), marked as Gotit's own so it
+  /// isn't reported as a new copy. Gives back a mark for [wipe], or null
+  /// when this clipboard can't be wiped later.
+  Future<Object?> write(Clip clip);
+
+  /// Clears the clipboard, but only while it still holds what the write
+  /// that gave [mark] put there.
+  Future<void> wipe(Object mark);
 }
 
 /// Carries copies between this device's clipboard and the link: copies made
@@ -47,8 +54,9 @@ class ClipBridge {
   /// A copy made here reached the other device.
   final void Function(Clip clip)? onSent;
 
-  /// A copy from the other device is now on this clipboard.
-  final void Function(Clip clip)? onArrived;
+  /// A copy from the other device is now on this clipboard; [mark] is what
+  /// the clipboard gave back for wiping it later.
+  final void Function(Clip clip, Object? mark)? onArrived;
 
   final _subscriptions = <StreamSubscription<Clip>>[];
 
@@ -74,6 +82,13 @@ class ClipBridge {
     return sent;
   }
 
+  /// Puts [clip] back on this device's clipboard only: it doesn't cross.
+  /// Gives back the clipboard's mark for wiping it later.
+  Future<Object?> copyHere(Clip clip) {
+    guard.wrote(clip.key);
+    return clipboard.write(clip);
+  }
+
   void _copied(Clip clip) {
     if (!sharing() || clip.isEmpty || clip.tooBig) return;
     // Send on purpose always sends; a watched copy goes through the guard.
@@ -84,7 +99,7 @@ class ClipBridge {
   Future<void> _arrived(Clip clip) async {
     if (!sharing() || clip.tooBig) return;
     guard.wrote(clip.key);
-    await clipboard.write(clip);
-    onArrived?.call(clip);
+    final mark = await clipboard.write(clip);
+    onArrived?.call(clip, mark);
   }
 }

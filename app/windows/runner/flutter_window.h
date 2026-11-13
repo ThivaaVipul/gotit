@@ -8,6 +8,7 @@
 
 #include "clipboard_bridge.h"
 #include "files_bridge.h"
+#include "notices_bridge.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -36,6 +37,9 @@ class FlutterWindow : public Win32Window {
 
   // Files to send: dropped on the window, or copied for Ctrl+F2.
   std::unique_ptr<FilesBridge> files_;
+
+  // Quiet toasts: links from the phone.
+  std::unique_ptr<NoticesBridge> notices_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

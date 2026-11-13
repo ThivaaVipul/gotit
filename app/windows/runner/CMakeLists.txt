@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "clipboard_bridge.cpp"
   "files_bridge.cpp"
   "image_codec.cpp"
+  "notices_bridge.cpp"
   "flutter_window.cpp"
   "main.cpp"
   "utils.cpp"
@@ -39,6 +40,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 # Windows Imaging Component, for images on the clipboard.
 target_link_libraries(${BINARY_NAME} PRIVATE "windowscodecs.lib")
+# Windows Runtime activation, for quiet toasts.
+target_link_libraries(${BINARY_NAME} PRIVATE "runtimeobject.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
