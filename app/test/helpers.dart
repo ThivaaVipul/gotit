@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:gotit/core/platform/start_with_windows.dart';
 import 'package:gotit/core/update/installer.dart';
@@ -58,3 +60,20 @@ Updater noUpdates(UpdateState state) => Updater(
   installer: _NoInstaller(),
   downloadDir: () async => Directory.systemTemp,
 )..value = state;
+
+/// A tiny PNG header saying [width] x [height], plus [extra] bytes to make
+/// images of different sizes and digests.
+Uint8List png(int width, int height, {int extra = 0, int seed = 1}) {
+  final bytes = BytesBuilder()
+    ..add([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    ..add([0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  final size = ByteData(8)
+    ..setUint32(0, width)
+    ..setUint32(4, height);
+  bytes
+    ..add(size.buffer.asUint8List())
+    ..add(List.filled(5, 0));
+  final random = Random(seed);
+  bytes.add(List.generate(extra, (_) => random.nextInt(256)));
+  return bytes.toBytes();
+}

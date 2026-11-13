@@ -30,12 +30,19 @@ class FakeClipboard implements DeviceClipboard {
   // ignore: close_sinks
   final local = StreamController<Clip>.broadcast();
   final written = <Clip>[];
+  final wiped = <Object>[];
 
   @override
   Stream<Clip> get copies => local.stream;
 
   @override
-  Future<void> write(Clip clip) async => written.add(clip);
+  Future<Object?> write(Clip clip) async {
+    written.add(clip);
+    return written.length;
+  }
+
+  @override
+  Future<void> wipe(Object mark) async => wiped.add(mark);
 }
 
 void main() {
@@ -61,7 +68,7 @@ void main() {
       clipboard: clipboard,
       sharing: () => sharingOn,
       onSent: (clip) => sentSigns.add(clip.text),
-      onArrived: (clip) => arrivals.add(clip.text),
+      onArrived: (clip, _) => arrivals.add(clip.text),
     ).start();
   });
 

@@ -110,6 +110,12 @@ object Channels {
                             else -> result.error("args", "No text or image", null)
                         }
                     }
+                    // A sensitive copy's minute is up: cleared if it is still
+                    // the one Gotit wrote. Needs the copy watcher to look.
+                    "wipe" -> {
+                        call.argument<String>("sha")?.let { CopyWatchService.instance?.wipe(it) }
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -296,12 +302,12 @@ object Channels {
         }
     }
 
-    /** An image copied here, or a new screenshot, as PNG. Any thread. */
-    fun copiedImage(png: ByteArray, copiedAt: Long, manual: Boolean) {
+    /** An image copied here, or a new [screenshot], as PNG. Any thread. */
+    fun copiedImage(png: ByteArray, copiedAt: Long, manual: Boolean, screenshot: Boolean = false) {
         main.post {
             clipboard?.invokeMethod(
                 "copied",
-                mapOf("image" to png, "at" to copiedAt, "manual" to manual),
+                mapOf("image" to png, "at" to copiedAt, "manual" to manual, "screenshot" to screenshot),
             )
         }
     }

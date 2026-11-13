@@ -109,6 +109,10 @@ class ChannelOutgoingFile implements OutgoingFile {
   @override
   final int size;
 
+  /// Android lets Gotit read a shared file only while it is being shared.
+  @override
+  String? get source => null;
+
   @override
   Stream<List<int>> read() async* {
     Future<Uint8List?> fetch() => _channel.invokeMethod<Uint8List>('read', {

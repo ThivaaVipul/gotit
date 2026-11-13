@@ -371,7 +371,7 @@ void main() {
     final atPc = Transfers(
       link: link.pc,
       store: _SlowStore(FolderStore(() async => dir)),
-      onBatch: arrived.addAll,
+      onBatch: (files, _) => arrived.addAll(files),
     )..start();
     final fromPhone = Transfers(link: ph, store: FolderStore(() async => dir))
       ..start();

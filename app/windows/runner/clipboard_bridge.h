@@ -13,7 +13,10 @@
 
 // The PC's clipboard for Gotit: tells Dart about each copy (as "copied" on
 // the app.gotit/clipboard channel) and writes what the phone sends ("write"):
-// text, or an image as PNG. Nothing read or written is kept or logged.
+// text, or an image as PNG, answering with the clipboard's sequence number.
+// "wipe" with that number clears the clipboard if nothing changed it since
+// (a sensitive copy whose minute is up). Nothing read or written is kept or
+// logged.
 class ClipboardBridge {
  public:
   ClipboardBridge(flutter::BinaryMessenger* messenger, HWND window);
@@ -29,6 +32,7 @@ class ClipboardBridge {
   bool WriteImage(const std::vector<uint8_t>& png);
   bool WriteFiles(const std::vector<std::wstring>& paths,
                   const std::wstring& picture);
+  bool Wipe(DWORD sequence);
 
   HWND window_;
   // Marks Gotit's own writes, so they are never reported as new copies.

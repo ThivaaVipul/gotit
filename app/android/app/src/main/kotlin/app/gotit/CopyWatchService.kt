@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -275,9 +276,40 @@ class CopyWatchService : AccessibilityService() {
         main.postDelayed({ read(t) }, RETRY_DELAY_MS)
     }
 
-    private fun read(t: CopyTrigger) {
+    /**
+     * Clears the clipboard if it still holds Gotit's own write of the text
+     * whose SHA-256 is [sha]: a sensitive copy whose minute is up. Anything
+     * copied since stays. Looked at the same invisible way as a copy.
+     */
+    fun wipe(sha: String) {
+        main.post {
+            read(null) { copy ->
+                val text = copy?.text
+                // Logged by outcome only, never what was there.
+                val outcome = when {
+                    copy == null -> "nothing to read"
+                    !copy.ours || text == null || PhoneClipboard.sha256(text) != sha -> "kept, replaced since"
+                    else -> {
+                        PhoneClipboard.clear(this)
+                        "cleared"
+                    }
+                }
+                Log.d(TAG, "wipe: $outcome")
+            }
+        }
+    }
+
+    /**
+     * Reads the clipboard during a moment of focus. With [then], what was
+     * read goes there and nothing else happens; otherwise it is a copy to
+     * report for [t].
+     */
+    private fun read(t: CopyTrigger?, then: ((PhoneClipboard.Copy?) -> Unit)? = null) {
         lastReadUptime = SystemClock.uptimeMillis()
-        if (overlay != null) return
+        if (overlay != null) {
+            if (t == null) Log.d(TAG, "wipe: busy reading, kept")
+            return
+        }
         val view = object : View(this) {
             private var done = false
 
@@ -287,7 +319,11 @@ class CopyWatchService : AccessibilityService() {
                     done = true
                     val copy = PhoneClipboard.read(this@CopyWatchService)
                     main.post { removeOverlay() }
-                    CopyReads.report(this@CopyWatchService, t, "overlay", copy)
+                    if (then != null) {
+                        then(copy)
+                    } else if (t != null) {
+                        CopyReads.report(this@CopyWatchService, t, "overlay", copy)
+                    }
                 }
             }
         }
@@ -304,14 +340,15 @@ class CopyWatchService : AccessibilityService() {
             getSystemService(WindowManager::class.java).addView(view, params)
             overlay = view
         } catch (e: RuntimeException) {
-            readWithActivity(t)
+            // A wipe isn't worth an activity: the clip just stays.
+            if (t != null) readWithActivity(t) else Log.d(TAG, "wipe: no overlay, kept")
             return
         }
         // Just after a restart the overlay may get no focus: the activity then.
         main.postDelayed({
             if (overlay === view) {
                 removeOverlay()
-                readWithActivity(t)
+                if (t != null) readWithActivity(t) else Log.d(TAG, "wipe: no focus, kept")
             }
         }, FOCUS_WAIT_MS)
     }
@@ -348,6 +385,8 @@ class CopyWatchService : AccessibilityService() {
         @Volatile
         var instance: CopyWatchService? = null
             private set
+
+        private const val TAG = "Gotit"
 
         const val ON = "on"
         const val OFF = "off"

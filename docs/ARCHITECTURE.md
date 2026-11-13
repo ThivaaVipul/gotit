@@ -31,7 +31,9 @@ app/                    the Flutter app (android/ and windows/ runners)
   lib/core/link/        discovery, pairing, session, protocol (plain Dart)
   lib/core/clip/        clip model, echo guard, sensitive rules (plain Dart)
   lib/core/transfer/    file send and receive, zipping folders
-  lib/core/state/       the shared switch, the recent list, settings
+  lib/core/sharing/     the shared switch (plain Dart)
+  lib/core/recent/      the recent list, kept on disk (plain Dart)
+  lib/core/state/       settings, the phone's ongoing notification
   lib/core/platform/    Dart side of the native channels
   lib/features/         home, pairing, setup guide, settings
   test/                 mirrors lib/; the link is tested end to end on localhost
@@ -139,7 +141,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   | `bye` | the other side forgot this pairing |
   | `ping`, `pong` | liveness |
   | `sharing` (M2d) | the switch: on or off, when it changed, which device changed it |
-  | `clip` (M2c, M3) | `kind` text or image, copied-at time, a sensitive flag; the body is the UTF-8 text or the PNG |
+  | `clip` (M2c, M3) | `kind` text or image, copied-at time, a sensitive flag, and from M5 a screenshot flag for a new phone screenshot (older peers ignore it); the body is the UTF-8 text or the PNG |
   | `file.offer`, `file.chunk`, `file.done` (SHA-256), `file.cancel` (M4, link version 3) | a file in 256 KiB chunks: id, name, size and its batch; the receiver keeps it only when the SHA-256 matches |
 
   Text clips are capped at 1 MiB and images at 25 MiB. A bigger one stays where it was copied (M4 may send it as a file).
@@ -206,7 +208,7 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - Ctrl+F2: `RegisterHotKey` in the runner; on `WM_HOTKEY` it reads the files copied in Explorer (`CF_HDROP`). When another app already holds Ctrl+F2, the drop area says so.
   - Folders are zipped first (`ZippedFolder`, `archive` 4.6) in their own isolate, which Cancel can stop at once, into `%TEMP%\gotit-send`, cleared after the send and at start. The zip holds the folder itself; photos, videos, music and archives are stored as they are and the rest deflated. Every folder of a batch is zipped before its first file goes.
   - Answers: dropped files are answered in the window (progress on home; a message when the phone isn't connected); Send to and Ctrl+F2 with toasts ("Sending to", "isn't connected", "No files copied") and the tray's check once sent. Sharing off always brings the window up asking "Turn on and send".
-- **Receiving files** (M4a): into `Downloads\Gotit` through `.gotit-part` files renamed once whole (`FolderStore`), refused while sharing is off. Each batch then goes on the clipboard as files (`CF_HDROP` with the copy drop effect, so Ctrl+V copies it into a folder, an email or a chat), a single image also as a picture (decoded with WIC, skipped above 40 million pixels), and a toast names the phone with Open and Show in folder (`local_notifier` 0.1.6; Windows needs the Start menu shortcut with the app ID "Gotit", which the installer sets and the toasts use). Home lists transfers with progress, Cancel and Open.
+- **Receiving files** (M4a): into `Downloads\Gotit` through `.gotit-part` files renamed once whole (`FolderStore`), refused while sharing is off. Each batch then goes on the clipboard as files (`CF_HDROP` with the copy drop effect, so Ctrl+V copies it into a folder, an email or a chat), a single image also as a picture (decoded with WIC, skipped above 40 million pixels), and a toast names the phone with Open and Show in folder (`local_notifier` 0.1.6; Windows needs the Start menu shortcut with the app ID "Gotit", which the installer sets and the toasts use). Home's Recent card shows files on their way, then keeps them (below).
 - **Start with Windows** (`lib/core/platform/start_with_windows.dart`, M2b1):
   - **How:** a value named Gotit in the per-user Run key, written with `win32_registry` 3.0.3. No admin is needed. (`launch_at_startup` needs an older `win32` than `package_info_plus` does, so it can't be used.)
   - **Default:** the first launch of an installed copy turns it on. After that the setting in Settings sticks, and each launch rewrites the value so the path stays current.
@@ -214,11 +216,24 @@ Built in M2b2, as plain Dart in `lib/core/link/`, and tested end to end with two
   - **Uninstall:** the uninstaller removes the value.
 - **Package check:** the leanflutter desktop packages are moving to native code built by build hooks, in releases that need Flutter 3.47. Gotit stays on their classic releases until it moves Flutter. M2b1's release proves they build on GitHub's Windows runner with the C++ tools alone.
 
+## The recent list (M5a)
+
+Plain Dart in `lib/core/recent/`, shown by home's Recent card (`lib/features/home/widgets/recent_card.dart`).
+
+- **What it holds:** the last 20 things that crossed either way, newest first: text, links (a copy that is just one http or https address), images (a phone screenshot says so) and files, one item per batch. Copies that never crossed aren't listed. The same text or image again moves to the top instead of showing twice.
+- **Kept across restarts** (`RecentList`): `recent.json` in the app's support folder, and each image as a PNG in `recent/` beside it, about 100 MB of images at most (the oldest image rows go first). Received files are only pointed at, where they arrived. On the PC a sent file points at where it was sent from; on the phone it is a record only, since Android lets Gotit read a shared file only while it is being shared. A damaged list starts empty; at start, items whose image is gone are dropped and images no item uses are deleted.
+- **Sensitive copies** stay in memory only, show as dots, and leave after a minute. When the minute is up, `RecentKeeper` wipes the clipboard that holds Gotit's write of it, but only if nothing replaced it: the PC compares the clipboard's sequence number from that write and looks for its private format; the phone reads the clipboard the copy watcher's way, compares the label and the text's SHA-256, and skips the wipe while the watcher is off. Sensitive images cross but aren't listed.
+- **Copying again** puts an item on this device's clipboard as Gotit's own write (`ClipBridge.copyHere`), so it doesn't cross, and moves it to the top.
+- **Files on their way** sit at the top with progress and Cancel. `Transfers` marks each row with its batch; once a batch is over, the files that made it are handed over (`onBatch`, `onSent`) as one item and their rows leave. A failed or cancelled row stays 6 seconds.
+- **Removing:** a long press (phone) or a right-click (PC) opens an item's menu with Remove, and Clear empties the list. Both say so in a snackbar with Undo for 4 seconds (set not to persist, as a snackbar with an action otherwise does); a removed image is deleted 8 seconds later unless it came back.
+- **Links** that arrive get a quiet notice with Open: on the PC a toast made in the runner through the Windows Runtime (`notices_bridge.cpp`: no sound, tagged so the newest replaces the last, expiring after 5 minutes), since `local_notifier` always plays a sound; on the phone a notification on its own low-importance "links" channel (`Links.kt`), under one ID so the newest replaces the last, timing out after 5 minutes. Only http and https addresses ever open.
+- **Actions** (`RecentActions`): the PC opens things with their usual app and shows files in Explorer; the phone opens files, shares images (`ClipProvider` serves `recent/` images read-only) and received files, and opens Files at `Download/Gotit`.
+
 ## What each device keeps
 
 - Its identity (key and certificate), in the platform's secure storage, and in `settings.json` the paired device's ID, name and certificate (plus, on the phone, the PC's last address).
 - The switch state.
-- The recent list: the last 20 items as JSON, holding kind, direction, time, a short preview (never for sensitive items) and the file location. Sensitive items are dropped after a minute.
+- The recent list: `recent.json` and its images in `recent/`, as above. Sensitive items are never written. Uninstalling on the PC removes both (pairing and settings stay, for a reinstall); on the phone, Android removes all of Gotit's data.
 - Settings (`settings.json` in the app's support folder): the PC's name and start with Windows.
 
 Nothing else is stored, and nothing leaves the local network except the update check with GitHub. Logs never hold what was copied.

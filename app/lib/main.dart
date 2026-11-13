@@ -22,9 +22,13 @@ import 'package:gotit/core/platform/pc_files.dart';
 import 'package:gotit/core/platform/pc_notices.dart';
 import 'package:gotit/core/platform/phone_downloads.dart';
 import 'package:gotit/core/platform/phone_setup.dart';
+import 'package:gotit/core/platform/recent_actions.dart';
 import 'package:gotit/core/platform/share_target.dart';
 import 'package:gotit/core/platform/sharing_controls.dart';
 import 'package:gotit/core/platform/start_with_windows.dart';
+import 'package:gotit/core/recent/recent.dart';
+import 'package:gotit/core/recent/recent_actions.dart';
+import 'package:gotit/core/recent/recent_keeper.dart';
 import 'package:gotit/core/sharing/sharing.dart';
 import 'package:gotit/core/state/notice_keeper.dart';
 import 'package:gotit/core/state/settings.dart';
@@ -118,8 +122,15 @@ Future<void> main(List<String> args) async {
   PhoneSetup? phoneSetup;
   SharingSwitch? sharing;
   Transfers? transfers;
+  RecentActions? recentActions;
   PcFiles? pcFiles;
   GlobalKey<NavigatorState>? navigator;
+  // What crossed either way, kept in Gotit's own folder.
+  final recent = await RecentList.open(support);
+  List<RecentFile> recentFiles(Iterable<(String, int, String?)> files) => [
+    for (final (name, size, location) in files)
+      RecentFile(name: name, size: size, location: location),
+  ];
   // The switch both devices share, kept across restarts.
   SharingSwitch sharingOver(SharingLink link) => SharingSwitch(
     initial: settings.value.sharing ?? SharingState.initial,
@@ -148,20 +159,35 @@ Future<void> main(List<String> args) async {
       showSharing();
     }
     await _advertise(pcLink, identity, settings, windowsName);
+    final link = pcLink;
     // Copies cross both ways while sharing is on; one that reaches the phone
-    // flashes the tray.
+    // flashes the tray. Both ways they join the recent list, and a link from
+    // the phone gets a quiet toast with Open.
     final clipboard = ChannelClipboard();
-    ClipBridge(
-      link: pcLink,
+    late final RecentKeeper keeper;
+    final bridge = ClipBridge(
+      link: link,
       clipboard: clipboard,
       sharing: () => pcSharing.on,
-      onSent: (_) => shell?.flashSent(),
-    ).start();
+      onSent: (clip) {
+        shell?.flashSent();
+        unawaited(keeper.sent(clip));
+      },
+      onArrived: (clip, mark) => unawaited(keeper.arrived(clip, mark)),
+    )..start();
+    keeper = RecentKeeper(
+      list: recent,
+      clipboard: clipboard,
+      copyHere: bridge.copyHere,
+      onLink: (url) => unawaited(
+        showLinkNotice(from: link.state.phone?.name ?? 'your phone', url: url),
+      ),
+    );
+    recentActions = PcRecentActions(keeper);
     // Files from the phone: Downloads\Gotit, then on the clipboard ready to
     // paste, with a toast. Refused while sharing is off.
     final notices = PcNotices();
     unawaited(notices.setup(localBuild: isLocalBuild(version)));
-    final link = pcLink;
     final pcTransfers = Transfers(
       link: link,
       store: GatedStore(
@@ -173,7 +199,7 @@ Future<void> main(List<String> args) async {
         }),
         open: () => pcSharing.on,
       ),
-      onBatch: (files) {
+      onBatch: (files, batch) {
         final picture = files.length == 1 && files.single.isImage
             ? files.single.location
             : null;
@@ -185,7 +211,17 @@ Future<void> main(List<String> args) async {
         unawaited(
           notices.received(files, from: link.state.phone?.name ?? 'your phone'),
         );
+        recent.addFiles(
+          recentFiles([for (final f in files) (f.name, f.size, f.location)]),
+          RecentWay.received,
+          batch: batch,
+        );
       },
+      onSent: (files, batch) => recent.addFiles(
+        recentFiles([for (final f in files) (f.name, f.size, f.source)]),
+        RecentWay.sent,
+        batch: batch,
+      ),
     )..start();
     transfers = pcTransfers;
     // Files to the phone: dropped on the window, Send to, or Ctrl+F2.
@@ -240,8 +276,21 @@ Future<void> main(List<String> args) async {
     final phoneTransfers = Transfers(
       link: link,
       store: GatedStore(downloads, open: () => phoneSharing.on),
-      onBatch: (files) => unawaited(
-        downloads.arrived(files, from: link.state.pc?.name ?? 'your PC'),
+      onBatch: (files, batch) {
+        unawaited(
+          downloads.arrived(files, from: link.state.pc?.name ?? 'your PC'),
+        );
+        recent.addFiles(
+          recentFiles([for (final f in files) (f.name, f.size, f.location)]),
+          RecentWay.received,
+          batch: batch,
+        );
+      },
+      // A shared file can't be opened again later: a record only.
+      onSent: (files, batch) => recent.addFiles(
+        recentFiles([for (final f in files) (f.name, f.size, null)]),
+        RecentWay.sent,
+        batch: batch,
       ),
     )..start();
     transfers = phoneTransfers;
@@ -253,12 +302,29 @@ Future<void> main(List<String> args) async {
       sharing: phoneSharing,
       transfers: phoneTransfers,
     )..start();
+    // Copies cross both ways while sharing is on, and join the recent list;
+    // a link from the PC gets a quiet notice with Open.
+    final phoneClipboard = ChannelClipboard();
+    late final RecentKeeper keeper;
     final bridge = ClipBridge(
-      link: phoneLink,
-      clipboard: ChannelClipboard(),
+      link: link,
+      clipboard: phoneClipboard,
       sharing: () => phoneSharing.on,
-      onSent: (_) => notice.sent(),
+      onSent: (clip) {
+        notice.sent();
+        unawaited(keeper.sent(clip));
+      },
+      onArrived: (clip, mark) => unawaited(keeper.arrived(clip, mark)),
     )..start();
+    keeper = RecentKeeper(
+      list: recent,
+      clipboard: phoneClipboard,
+      copyHere: bridge.copyHere,
+      onLink: (url) => unawaited(
+        showLinkNotice(from: link.state.pc?.name ?? 'your PC', url: url),
+      ),
+    );
+    recentActions = PhoneRecentActions(keeper);
     // Share > Gotit: files, and links or text.
     PhoneShareTarget(
       link: link,
@@ -283,6 +349,8 @@ Future<void> main(List<String> args) async {
         phoneSetup: phoneSetup,
         sharing: sharing,
         transfers: transfers,
+        recent: recent,
+        recentActions: recentActions,
         pcFiles: pcFiles,
         navigator: navigator,
       ),

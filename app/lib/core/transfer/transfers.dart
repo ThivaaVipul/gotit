@@ -29,6 +29,11 @@ abstract interface class OutgoingFile {
 
   /// Its bytes in pieces of any size, read only as fast as they are sent.
   Stream<List<int>> read();
+
+  /// Where it was sent from, to show it there later: a path on the PC (the
+  /// folder, for a zipped one). Null on the phone, where a shared file can
+  /// be read only while it is being shared.
+  String? get source;
 }
 
 /// A file made just before it is sent: a folder, zipped.
@@ -83,6 +88,18 @@ abstract interface class IncomingFile {
   Future<void> discard();
 }
 
+/// A file that went, and where it was sent from.
+@immutable
+class SentFile {
+  const SentFile({required this.name, required this.size, this.source});
+
+  final String name;
+
+  /// In bytes, or -1 when unknown.
+  final int size;
+  final String? source;
+}
+
 /// A file that arrived and was kept.
 @immutable
 class ReceivedFile {
@@ -98,8 +115,11 @@ class ReceivedFile {
   final String location;
   final int size;
 
-  bool get isImage => _imageExtensions.contains(extensionOf(name));
+  bool get isImage => isImageName(name);
 }
+
+/// Whether [name] is a picture's, by its extension.
+bool isImageName(String name) => _imageExtensions.contains(extensionOf(name));
 
 const _imageExtensions = {
   'png',
@@ -158,6 +178,7 @@ class Transfer {
     this.status = TransferStatus.running,
     this.location,
     this.preparing = false,
+    this.batch = '',
   });
 
   final String id;
@@ -176,6 +197,9 @@ class Transfer {
 
   /// Still being made (a folder being zipped), before anything is sent.
   final bool preparing;
+
+  /// The files sent together that it belongs to.
+  final String batch;
 
   /// From 0 to 1, or null while the size is unknown.
   double? get progress => size > 0 ? (bytes / size).clamp(0.0, 1.0) : null;
@@ -196,6 +220,7 @@ class Transfer {
     status: status ?? this.status,
     location: location ?? this.location,
     preparing: preparing,
+    batch: batch,
   );
 }
 
@@ -206,13 +231,18 @@ enum SendResult { sent, away, failed, cancelled }
 /// 256 KiB pieces with a SHA-256 of the whole file, which the receiver checks
 /// before keeping it. Nothing is queued across a lost link: what was on its
 /// way fails, and a half-received file is thrown away.
+///
+/// Files sent together are a batch. Once a batch is over, either way, the
+/// files that made it are handed over ([onBatch], [onSent]) and their rows
+/// leave the list; a failed or cancelled row stays for [keepFailed].
 class Transfers extends ValueNotifier<List<Transfer>> {
   Transfers({
     required this.link,
     required this.store,
     this.onBatch,
+    this.onSent,
     this.chunkSize = 256 * 1024,
-    this.keepFinished = const Duration(seconds: 30),
+    this.keepFailed = const Duration(seconds: 6),
     this.progressEvery = const Duration(milliseconds: 200),
     Random? random,
   }) : _random = random ?? Random.secure(),
@@ -221,12 +251,15 @@ class Transfers extends ValueNotifier<List<Transfer>> {
   final FileLink link;
   final FileStore store;
 
-  /// Files sent together have arrived, or as many as will.
-  final void Function(List<ReceivedFile> files)? onBatch;
+  /// Files sent together have arrived, or as many as will, in [batch].
+  final void Function(List<ReceivedFile> files, String batch)? onBatch;
+
+  /// Files sent together have gone, or as many as did, in [batch].
+  final void Function(List<SentFile> files, String batch)? onSent;
   final int chunkSize;
 
-  /// How long a finished transfer stays listed.
-  final Duration keepFinished;
+  /// How long a failed or cancelled transfer stays listed.
+  final Duration keepFailed;
 
   /// At most one progress update per this, so a fast transfer doesn't flood
   /// the screen or the notification.
@@ -286,6 +319,8 @@ class Transfers extends ValueNotifier<List<Transfer>> {
   Future<SendResult> _sendAll(List<OutgoingFile> files) async {
     if (files.isEmpty) return SendResult.sent;
     if (!link.linked) return SendResult.away;
+    final batch = _newId();
+    final sent = <SentFile>[];
     // Files that are made first (folders, zipped) are all made before the
     // first file goes, so a batch never stops halfway for one that couldn't
     // be made. Each keeps its row from then on.
@@ -297,7 +332,7 @@ class Transfers extends ValueNotifier<List<Transfer>> {
         if (file is! PreparedFile) continue;
         made.add(file);
         final id = ids[i] = _newId();
-        final result = await _prepare(file, id);
+        final result = await _prepare(file, id, batch);
         if (result != SendResult.sent) {
           _abandon(ids.values, result);
           return result;
@@ -307,22 +342,21 @@ class Transfers extends ValueNotifier<List<Transfer>> {
         _abandon(ids.values, SendResult.away);
         return SendResult.away;
       }
-      final batch = _newId();
       for (var i = 0; i < files.length; i++) {
-        final result = await _sendOne(
-          files[i],
-          batch,
-          i,
-          files.length,
-          id: ids[i],
-        );
+        final file = files[i];
+        final result = await _sendOne(file, batch, i, files.length, id: ids[i]);
         if (result != SendResult.sent) {
           _abandon(ids.values, result);
           return result;
         }
+        sent.add(
+          SentFile(name: file.name, size: file.size, source: file.source),
+        );
       }
       return SendResult.sent;
     } finally {
+      if (sent.isNotEmpty) onSent?.call(List.unmodifiable(sent), batch);
+      _fold(batch);
       for (final file in made) {
         try {
           await file.dispose();
@@ -334,7 +368,11 @@ class Transfers extends ValueNotifier<List<Transfer>> {
   }
 
   /// Makes [file], showing it as being made; [SendResult.sent] once made.
-  Future<SendResult> _prepare(PreparedFile file, String id) async {
+  Future<SendResult> _prepare(
+    PreparedFile file,
+    String id,
+    String batch,
+  ) async {
     _put(
       Transfer(
         id: id,
@@ -342,6 +380,7 @@ class Transfers extends ValueNotifier<List<Transfer>> {
         size: -1,
         direction: TransferDirection.sending,
         preparing: true,
+        batch: batch,
       ),
     );
     _preparing[id] = file;
@@ -361,6 +400,7 @@ class Transfers extends ValueNotifier<List<Transfer>> {
         name: file.name,
         size: file.size,
         direction: TransferDirection.sending,
+        batch: batch,
       ),
     );
     return SendResult.sent;
@@ -401,6 +441,7 @@ class Transfers extends ValueNotifier<List<Transfer>> {
         name: file.name,
         size: file.size,
         direction: TransferDirection.sending,
+        batch: batch,
       ),
     );
     final offered = await link.sendFileFrame(
@@ -506,6 +547,7 @@ class Transfers extends ValueNotifier<List<Transfer>> {
           size: size,
           direction: TransferDirection.receiving,
           status: TransferStatus.failed,
+          batch: batch,
         ),
       );
       _clearLater(id);
@@ -524,6 +566,7 @@ class Transfers extends ValueNotifier<List<Transfer>> {
         name: name,
         size: size,
         direction: TransferDirection.receiving,
+        batch: batch,
       ),
     );
   }
@@ -595,8 +638,9 @@ class Transfers extends ValueNotifier<List<Transfer>> {
   void _batchEnded(_Incoming incoming) {
     final files = _batches.remove(incoming.batch);
     if (files != null && files.isNotEmpty) {
-      onBatch?.call(List.unmodifiable(files));
+      onBatch?.call(List.unmodifiable(files), incoming.batch);
     }
+    _fold(incoming.batch);
   }
 
   Future<void> _linkLost() async {
@@ -608,10 +652,11 @@ class Transfers extends ValueNotifier<List<Transfer>> {
       _batchEnded(incoming);
     }
     // A batch lost between two of its files: hand over what arrived.
-    final waiting = List.of(_batches.values);
+    final waiting = Map.of(_batches);
     _batches.clear();
-    for (final files in waiting) {
-      if (files.isNotEmpty) onBatch?.call(List.unmodifiable(files));
+    for (final MapEntry(key: batch, value: files) in waiting.entries) {
+      if (files.isNotEmpty) onBatch?.call(List.unmodifiable(files), batch);
+      _fold(batch);
     }
   }
 
@@ -664,12 +709,21 @@ class Transfers extends ValueNotifier<List<Transfer>> {
         location: location,
       ),
     );
-    _clearLater(id);
+    // A file that made it stays until its batch is handed over.
+    if (status != TransferStatus.done) _clearLater(id);
+  }
+
+  /// [batch] is over and handed over: its files that made it leave the list.
+  void _fold(String batch) {
+    final list = value
+        .where((t) => t.batch != batch || t.status != TransferStatus.done)
+        .toList();
+    if (list.length != value.length) value = List.unmodifiable(list);
   }
 
   void _clearLater(String id) {
     _clearing.add(
-      Timer(keepFinished, () {
+      Timer(keepFailed, () {
         final list = value.where((t) => t.id != id || t.running).toList();
         if (list.length != value.length) value = List.unmodifiable(list);
       }),

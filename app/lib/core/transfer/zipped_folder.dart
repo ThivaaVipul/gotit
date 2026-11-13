@@ -27,6 +27,9 @@ class ZippedFolder implements PreparedFile {
   String get name => '${folderName(path)}.zip';
 
   @override
+  String? get source => path;
+
+  @override
   int get size {
     try {
       return _zip?.lengthSync() ?? -1;
